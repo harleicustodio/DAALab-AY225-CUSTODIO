@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TSP Route Analyzer — Cavite</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --paper:   #f5f0e8;
+    --paper2:  #ede8db;
+    --ink:     #1c1810;
+    --ink2:    #3a3228;
+    --faint:   #c8bfae;
+    --line:    #d6cfc3;
+    --accent:  #b5451b;
+    --accent2: #e8853a;
+    --blue:    #2d5fa6;
+    --green:   #2e7d4f;
+    --shadow:  rgba(28,24,16,0.12);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper2);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 0;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(28,24,16,0.03) 28px, rgba(28,24,16,0.03) 29px),
+      repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(28,24,16,0.02) 28px, rgba(28,24,16,0.02) 29px);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* wider max-width to give the table more room */
+  .page { position: relative; z-index: 1; max-width: 1600px; margin: 0 auto; padding: 40px 24px 60px; }
+
+  /* ── HEADER ─────────────────────────────── */
+  header {
+    display: flex; flex-direction: column; align-items: center;
+    margin-bottom: 36px;
+    border-bottom: 2px solid var(--ink2);
+    padding-bottom: 22px;
+    position: relative;
+  }
+  header::after {
+    content: ''; position: absolute; bottom: -5px; left: 0; right: 0;
+    height: 1px; background: var(--faint);
+  }
+  .header-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 5px; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(22px, 4.5vw, 44px);
+    font-weight: 900; color: var(--ink);
+    line-height: 1; letter-spacing: -1px; text-align: center;
+  }
+  .header-sub {
+    margin-top: 8px; font-size: 12px; color: #7a6f60;
+    font-family: 'DM Mono', monospace; letter-spacing: 2px;
+  }
+  .header-dec {
+    width: 60px; height: 3px; margin-top: 14px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  /* ── CONTROLS ────────────────────────────── */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 3px;
+    padding: 20px 22px; margin-bottom: 24px;
+    box-shadow: 0 2px 12px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+    position: relative;
+  }
+  .controls::before {
+    content: 'ROUTE PARAMETERS';
+    position: absolute; top: -10px; left: 18px;
+    font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 3px;
+    color: var(--accent); background: var(--paper); padding: 0 8px;
+  }
+  .ctrl-group { display: flex; flex-direction: column; flex: 1; min-width: 130px; }
+  .ctrl-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; letter-spacing: 2px; color: #7a6f60;
+    margin-bottom: 7px; text-transform: uppercase;
+  }
+  select {
+    background: var(--paper); border: 1px solid var(--faint);
+    border-bottom: 2px solid var(--ink2); color: var(--ink2);
+    padding: 9px 12px; border-radius: 2px;
+    font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%233a3228'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  select:focus { outline: none; border-color: var(--accent); box-shadow: 0 2px 0 var(--accent); }
+  select:hover { border-bottom-color: var(--accent); }
+
+  #findBtn {
+    align-self: flex-end; background: var(--ink2); color: var(--paper);
+    border: none; padding: 10px 26px; border-radius: 2px;
+    font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 3px;
+    cursor: pointer; transition: background .2s, transform .1s;
+    white-space: nowrap; position: relative; overflow: hidden;
+  }
+  #findBtn::after {
+    content: ''; position: absolute; inset: 0;
+    background: var(--accent); transform: translateX(-101%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1); z-index: 0;
+  }
+  #findBtn span { position: relative; z-index: 1; }
+  #findBtn:hover::after { transform: translateX(0); }
+  #findBtn:hover { background: var(--accent); }
+  #findBtn:active { transform: scale(.97); }
+
+  /* ── MAIN: 3-column grid — table col is now much wider ── */
+  .main {
+    display: grid;
+    grid-template-columns: minmax(300px, 1fr) 270px minmax(480px, 600px);
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr 260px; }
+    .table-col { grid-column: 1 / -1; }
+  }
+  @media (max-width: 620px) {
+    .main { grid-template-columns: 1fr; }
+  }
+
+  /* ── SHARED ─────────────────────────────── */
+  .panel-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; letter-spacing: 3px; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  /* ── MAP PANEL ──────────────────────────── */
+  .map-panel {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 3px;
+    padding: 20px;
+    box-shadow: 0 2px 12px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+    position: relative;
+  }
+  svg#graph { display: block; width: 100%; filter: drop-shadow(0 1px 2px rgba(28,24,16,0.08)); }
+  .hint {
+    font-size: 9px; color: var(--faint); text-align: center; margin-top: 10px;
+    font-family: 'DM Mono', monospace; letter-spacing: 2px;
+  }
+  .compass {
+    position: absolute; bottom: 16px; right: 16px;
+    width: 36px; height: 36px; opacity: 0.18; pointer-events: none;
+  }
+
+  /* ── MIDDLE COL: Legend + Result ────────── */
+  .middle-col { display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 3px;
+    padding: 18px;
+    box-shadow: 0 2px 12px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 9px; font-size: 11px; color: #7a6f60;
+  }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .legend-line-el { width: 24px; height: 3px; border-radius: 1px; flex-shrink: 0; }
+
+  .placeholder {
+    text-align: center; padding: 32px 10px;
+    font-family: 'Playfair Display', serif;
+    font-size: 14px; color: var(--faint); line-height: 2; font-style: italic;
+  }
+  .error-msg { color: var(--accent); font-size: 12px; padding: 12px 0; font-family: 'DM Mono', monospace; }
+
+  .path-nodes { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 14px; }
+  .path-node {
+    font-size: 9px; font-family: 'DM Mono', monospace;
+    padding: 4px 9px; border-radius: 2px;
+    border: 1px solid var(--line); background: var(--paper2); color: var(--faint);
+    transition: all .3s; letter-spacing: 1px;
+  }
+  .path-node.active { border-color: var(--accent); background: #b5451b15; color: var(--accent); font-weight: 500; }
+  .path-arrow { color: var(--line); font-size: 10px; }
+
+  .stat-box {
+    margin-bottom: 8px; padding: 10px 12px;
+    background: var(--paper2); border: 1px solid var(--line); border-radius: 2px;
+    transition: all .3s;
+  }
+  .stat-box.highlight { background: #b5451b0d; border-color: #b5451b55; box-shadow: 0 0 0 1px #b5451b22; }
+  .stat-label {
+    font-size: 8px; font-family: 'DM Mono', monospace;
+    letter-spacing: 2px; color: #a09080; margin-bottom: 4px; text-transform: uppercase;
+  }
+  .stat-label.highlight { color: var(--accent); }
+  .stat-value { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--ink2); }
+  .stat-value.highlight { color: var(--accent); }
+
+  .step-list { margin-top: 10px; }
+  .step-row {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #7a6f60;
+    margin-bottom: 5px; padding-bottom: 5px;
+    border-bottom: 1px dashed var(--line);
+    font-family: 'DM Mono', monospace;
+  }
+  .step-row:last-child { border-bottom: none; }
+  .step-right { color: var(--faint); }
+
+  /* ── TABLE COL ──────────────────────────── */
+  .table-col {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 3px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 12px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+    overflow-x: auto;
+  }
+  /* thin scrollbar for overflow cases */
+  .table-col::-webkit-scrollbar { height: 4px; }
+  .table-col::-webkit-scrollbar-track { background: var(--paper2); }
+  .table-col::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; color: var(--accent);
+    padding: 7px 14px; font-size: 8px; letter-spacing: 1.5px;
+    font-family: 'DM Mono', monospace; text-transform: uppercase;
+    border-bottom: 2px solid var(--ink2); white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    color: #7a6f60; font-size: 11px; font-family: 'DM Mono', monospace;
+    transition: background .2s; white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(28,24,16,0.025); }
+  tr.path-row td { background: #b5451b08; }
+  tr.path-row:hover td { background: #b5451b12; }
+  td.hl { color: var(--accent); font-weight: 500; }
+
+  /* mini sparkbar shown beneath each numeric value */
+  .cell-bar-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .cell-val { line-height: 1; }
+  .mini-bar {
+    height: 3px; border-radius: 1px;
+    background: var(--line); transition: background .3s;
+  }
+  tr.path-row .mini-bar              { background: #b5451b44; }
+  tr.path-row td.hl .mini-bar        { background: var(--accent); }
+
+  /* ── TOOLTIP ────────────────────────────── */
+  #tooltip {
+    position: fixed; pointer-events: none;
+    background: var(--ink2); color: var(--paper);
+    border-radius: 3px; padding: 8px 12px;
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    display: none; z-index: 99; line-height: 1.8;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  /* ── PATH ANIMATE ──────────────────────── */
+  .edge.path { stroke-dasharray: 8 4; animation: dash .8s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -24; } }
+
+  .opt-badge {
+    display: inline-block; font-family: 'DM Mono', monospace;
+    font-size: 8px; letter-spacing: 2px; color: var(--accent);
+    border: 1px solid var(--accent); padding: 2px 8px; border-radius: 2px;
+    margin-bottom: 10px; text-transform: uppercase;
+  }
+  .steps-header {
+    font-size: 8px; font-family: 'DM Mono', monospace;
+    letter-spacing: 2px; color: #a09080; margin-bottom: 8px;
+    text-transform: uppercase; padding-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="header-label">Shortest Path Finder</div>
+    <h1>Route Network Analyzer</h1>
+    <div class="header-sub">Travelling Salesman Problem — Cavite Nodes</div>
+    <div class="header-dec"></div>
+  </header>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">From Node</div>
+      <select id="startNode"></select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">To Node</div>
+      <select id="endNode"></select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Optimize By</div>
+      <select id="metric">
+        <option value="distance">Distance (km)</option>
+        <option value="time">Time (mins)</option>
+        <option value="fuel">Fuel (Liters)</option>
+      </select>
+    </div>
+    <div class="ctrl-group" style="justify-content:flex-end;">
+      <button id="findBtn"><span>▶ FIND PATH</span></button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- COL 1: Map -->
+    <div class="map-panel">
+      <div class="panel-label">Network Map</div>
+      <svg id="graph" viewBox="0 0 560 540"></svg>
+      <div class="hint">↑ HOVER EDGES FOR ROUTE DETAILS</div>
+      <svg class="compass" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="17" stroke="#1c1810" stroke-width="1.5"/>
+        <polygon points="18,2 21,18 18,15 15,18" fill="#1c1810"/>
+        <polygon points="18,34 15,18 18,21 21,18" fill="#888"/>
+        <polygon points="2,18 18,15 15,18 18,21" fill="#888"/>
+        <polygon points="34,18 18,21 21,18 18,15" fill="#1c1810"/>
+        <circle cx="18" cy="18" r="2" fill="#1c1810"/>
+        <text x="18" y="8" text-anchor="middle" font-size="5" fill="#1c1810" font-family="serif" font-weight="bold">N</text>
+      </svg>
+    </div>
+
+    <!-- COL 2: Legend + Result -->
+    <div class="middle-col">
+      <div class="card">
+        <div class="panel-label">Legend</div>
+        <div class="legend-item">
+          <div class="legend-line-el" style="background:var(--accent);height:3px;border-top:1px dashed #b5451b88;"></div>
+          Optimal Path
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--blue);"></div>
+          Start Node
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--accent);"></div>
+          End Node
+        </div>
+        <div class="legend-item">
+          <div class="legend-line-el" style="background:var(--line);"></div>
+          Unvisited Edge
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-label">Shortest Path Result</div>
+        <div id="result-content">
+          <div class="placeholder">Select nodes<br>and click Find Path</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 3: Edge Data Table — wider column -->
+    <div class="table-col">
+      <div class="panel-label">Edge Data Table</div>
+      <table id="edgeTable">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Dist (km)</th>
+            <th>Time (m)</th>
+            <th>Fuel (L)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const EDGES = [
+  {from:"IMUS",to:"BACOOR",distance:10,time:15,fuel:1.2},
+  {from:"BACOOR",to:"DASMA",distance:12,time:25,fuel:1.5},
+  {from:"DASMA",to:"KAWIT",distance:12,time:25,fuel:1.5},
+  {from:"KAWIT",to:"INDANG",distance:12,time:25,fuel:1.2},
+  {from:"INDANG",to:"SILANG",distance:14,time:25,fuel:1.5},
+  {from:"SILANG",to:"GENTRI",distance:10,time:25,fuel:1.3},
+  {from:"GENTRI",to:"NOVELETA",distance:10,time:25,fuel:1.5},
+  {from:"NOVELETA",to:"IMUS",distance:10,time:15,fuel:1.2},
+  {from:"BACOOR",to:"SILANG",distance:10,time:25,fuel:1.3},
+  {from:"DASMA",to:"SILANG",distance:12,time:25,fuel:1.5},
+  {from:"SILANG",to:"BACOOR",distance:10,time:25,fuel:1.3},
+  {from:"NOVELETA",to:"BACOOR",distance:10,time:15,fuel:1.2},
+  {from:"SILANG",to:"KAWIT",distance:14,time:25,fuel:1.2},
+  {from:"IMUS",to:"NOVELETA",distance:10,time:15,fuel:1.2},
+];
+
+const maxDist = Math.max(...EDGES.map(e => e.distance));
+const maxTime = Math.max(...EDGES.map(e => e.time));
+const maxFuel = Math.max(...EDGES.map(e => e.fuel));
+const BAR_MAX = 110; // px — wider bars to fill the larger column
+
+const NODE_POS = {
+  BACOOR:   {x:280, y:80},
+  DASMA:    {x:460, y:160},
+  IMUS:     {x:100, y:200},
+  NOVELETA: {x:80,  y:340},
+  KAWIT:    {x:280, y:280},
+  SILANG:   {x:460, y:340},
+  GENTRI:   {x:160, y:460},
+  INDANG:   {x:380, y:480},
+};
+
+const NODES = Object.keys(NODE_POS);
+let currentPath = [];
+let currentMetric = 'distance';
+let animInterval = null;
+
+const startSel = document.getElementById('startNode');
+const endSel   = document.getElementById('endNode');
+NODES.forEach(n => {
+  startSel.innerHTML += `<option value="${n}">${n}</option>`;
+  endSel.innerHTML   += `<option value="${n}">${n}</option>`;
+});
+endSel.value = 'SILANG';
+
+const tbody = document.querySelector('#edgeTable tbody');
+EDGES.forEach((e, i) => {
+  const dw = Math.round((e.distance / maxDist) * BAR_MAX);
+  const tw = Math.round((e.time     / maxTime) * BAR_MAX);
+  const fw = Math.round((e.fuel     / maxFuel) * BAR_MAX);
+  tbody.innerHTML += `
+    <tr id="erow-${i}">
+      <td>${e.from}</td>
+      <td>${e.to}</td>
+      <td>
+        <div class="cell-bar-wrap">
+          <span class="cell-val">${e.distance}</span>
+          <div class="mini-bar" style="width:${dw}px"></div>
+        </div>
+      </td>
+      <td>
+        <div class="cell-bar-wrap">
+          <span class="cell-val">${e.time}</span>
+          <div class="mini-bar" style="width:${tw}px"></div>
+        </div>
+      </td>
+      <td>
+        <div class="cell-bar-wrap">
+          <span class="cell-val">${e.fuel}</span>
+          <div class="mini-bar" style="width:${fw}px"></div>
+        </div>
+      </td>
+    </tr>`;
+});
+
+const svg = document.getElementById('graph');
+const NS  = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+for (let v of [100,200,300,400,500]) {
+  svg.appendChild(svgEl('line',{x1:v,y1:30,x2:v,y2:520,stroke:'#d6cfc3',strokeWidth:0.5,'stroke-opacity':0.6}));
+  svg.appendChild(svgEl('line',{x1:30,y1:v,x2:530,y2:v,stroke:'#d6cfc3',strokeWidth:0.5,'stroke-opacity':0.6}));
+}
+
+const edgeEls = [];
+const tooltip  = document.getElementById('tooltip');
+
+EDGES.forEach((e, i) => {
+  const f = NODE_POS[e.from], t = NODE_POS[e.to];
+  const dx = t.x-f.x, dy = t.y-f.y;
+  const len = Math.sqrt(dx*dx+dy*dy);
+  const ux = dx/len, uy = dy/len;
+  const ax = t.x - ux*20, ay = t.y - uy*20;
+  const px = -uy*5, py = ux*5;
+
+  const line = svgEl('line',{
+    class:'edge', x1:f.x, y1:f.y, x2:t.x, y2:t.y,
+    stroke:'#c8bfae', 'stroke-width':1.5, 'stroke-opacity':0.8
+  });
+  svg.appendChild(line);
+
+  const arrow = svgEl('polygon',{
+    points:`${ax},${ay} ${ax-ux*8+px},${ay-uy*8+py} ${ax-ux*8-px},${ay-uy*8-py}`,
+    fill:'#c8bfae', 'fill-opacity':0.7
+  });
+  svg.appendChild(arrow);
+
+  const hit = svgEl('line',{
+    x1:f.x, y1:f.y, x2:t.x, y2:t.y,
+    stroke:'transparent', 'stroke-width':14, style:'cursor:pointer'
+  });
+  hit.addEventListener('mousemove', ev => {
+    tooltip.style.display = 'block';
+    tooltip.style.left = (ev.clientX+14)+'px';
+    tooltip.style.top  = (ev.clientY+14)+'px';
+    tooltip.innerHTML = `<span style="color:var(--accent)">${e.from} → ${e.to}</span><br>${e.distance} km &nbsp;·&nbsp; ${e.time} min &nbsp;·&nbsp; ${e.fuel} L`;
+  });
+  hit.addEventListener('mouseleave', () => { tooltip.style.display='none'; });
+  svg.appendChild(hit);
+  edgeEls.push({line, arrow, edge:e, idx:i});
+});
+
+const nodeEls = {};
+NODES.forEach(n => {
+  const {x,y} = NODE_POS[n];
+  const g = svgEl('g',{});
+  const shadow    = svgEl('circle',{cx:x,cy:y+2,r:18,fill:'rgba(28,24,16,0.12)'});
+  const outerRing = svgEl('circle',{cx:x,cy:y,r:24,fill:'none',stroke:'#b5451b','stroke-width':1.5,'stroke-opacity':0,class:'node-ring'});
+  const circle    = svgEl('circle',{cx:x,cy:y,r:18,fill:'#f5f0e8',stroke:'#c8bfae','stroke-width':1.5});
+  const label     = svgEl('text',{x,y:y-3,'text-anchor':'middle','font-size':7.5,fill:'#7a6f60','font-weight':'500','letter-spacing':'0.5',style:'font-family: DM Mono, monospace; text-transform: uppercase;'});
+  label.textContent = n;
+  const dot = svgEl('circle',{cx:x,cy:y+6,r:2,fill:'#c8bfae'});
+
+  g.appendChild(shadow); g.appendChild(outerRing);
+  g.appendChild(circle); g.appendChild(label); g.appendChild(dot);
+  svg.appendChild(g);
+  nodeEls[n] = {g, circle, label, outerRing, dot};
+});
+
+function updateNodeStyle(n, type) {
+  const el = nodeEls[n];
+  if (type === 'active') {
+    el.circle.setAttribute('fill','#b5451b12');
+    el.circle.setAttribute('stroke','#b5451b');
+    el.circle.setAttribute('stroke-width','2.5');
+    el.label.setAttribute('fill','#b5451b');
+    el.outerRing.setAttribute('stroke-opacity','0.3');
+    el.dot.setAttribute('fill','#b5451b');
+  } else if (type === 'start') {
+    el.circle.setAttribute('fill','#2d5fa612');
+    el.circle.setAttribute('stroke','#2d5fa6');
+    el.circle.setAttribute('stroke-width','2.5');
+    el.label.setAttribute('fill','#2d5fa6');
+    el.dot.setAttribute('fill','#2d5fa6');
+  } else if (type === 'end') {
+    el.circle.setAttribute('fill','#b5451b12');
+    el.circle.setAttribute('stroke','#b5451b');
+    el.circle.setAttribute('stroke-width','2.5');
+    el.label.setAttribute('fill','#b5451b');
+    el.dot.setAttribute('fill','#b5451b');
+  } else {
+    el.circle.setAttribute('fill','#f5f0e8');
+    el.circle.setAttribute('stroke','#c8bfae');
+    el.circle.setAttribute('stroke-width','1.5');
+    el.label.setAttribute('fill','#7a6f60');
+    el.outerRing.setAttribute('stroke-opacity','0');
+    el.dot.setAttribute('fill','#c8bfae');
+  }
+}
+
+function resetGraph() {
+  edgeEls.forEach(({line, arrow}) => {
+    line.setAttribute('stroke','#c8bfae');
+    line.setAttribute('stroke-width','1.5');
+    line.setAttribute('stroke-opacity','0.8');
+    line.classList.remove('path');
+    arrow.setAttribute('fill','#c8bfae');
+    arrow.setAttribute('fill-opacity','0.7');
+  });
+  NODES.forEach(n => updateNodeStyle(n,'default'));
+  const s = startSel.value, e = endSel.value;
+  updateNodeStyle(s,'start');
+  if (e !== s) updateNodeStyle(e,'end');
+}
+
+startSel.addEventListener('change', () => { resetGraph(); currentPath=[]; renderResult(null); });
+endSel.addEventListener('change',   () => { resetGraph(); currentPath=[]; renderResult(null); });
+resetGraph();
+
+function dijkstra(start, end, metric) {
+  const dist = {}, prev = {};
+  NODES.forEach(n => { dist[n]=Infinity; prev[n]=null; });
+  dist[start] = 0;
+  const unvisited = new Set(NODES);
+  while (unvisited.size) {
+    let u = null;
+    unvisited.forEach(n => { if (u===null || dist[n]<dist[u]) u=n; });
+    if (u===end || dist[u]===Infinity) break;
+    unvisited.delete(u);
+    EDGES.filter(e=>e.from===u).forEach(e => {
+      const alt = dist[u] + e[metric];
+      if (alt < dist[e.to]) { dist[e.to]=alt; prev[e.to]=u; }
+    });
+  }
+  const path=[]; let cur=end;
+  while(cur){ path.unshift(cur); cur=prev[cur]; }
+  if(path[0]!==start) return null;
+
+  let totalDist=0, totalTime=0, totalFuel=0;
+  for(let i=0;i<path.length-1;i++){
+    const edge=EDGES.find(e=>e.from===path[i]&&e.to===path[i+1]);
+    if(edge){totalDist+=edge.distance;totalTime+=edge.time;totalFuel+=edge.fuel;}
+  }
+  return {path, totalDist, totalTime, totalFuel:totalFuel.toFixed(1)};
+}
+
+function renderResult(res) {
+  const div = document.getElementById('result-content');
+  if (!res) {
+    div.innerHTML = '<div class="placeholder">Select nodes<br>and click Find Path</div>';
+    return;
+  }
+  if (res.error) {
+    div.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    return;
+  }
+  const m = currentMetric;
+  const metricLabel = {distance:'Distance',time:'Time',fuel:'Fuel'};
+
+  let pathHTML = '<div class="path-nodes">';
+  res.path.forEach((n,i) => {
+    pathHTML += `<span class="path-node" id="pn-${n}">${n}</span>`;
+    if(i<res.path.length-1) pathHTML += '<span class="path-arrow">›</span>';
+  });
+  pathHTML += '</div>';
+
+  const stats = [
+    {label:'Total Distance', val:`${res.totalDist} km`,  key:'distance'},
+    {label:'Total Time',     val:`${res.totalTime} mins`, key:'time'},
+    {label:'Total Fuel',     val:`${res.totalFuel} L`,    key:'fuel'},
+  ];
+  let statsHTML = stats.map(s=>`
+    <div class="stat-box ${m===s.key?'highlight':''}">
+      <div class="stat-label ${m===s.key?'highlight':''}">${s.label}</div>
+      <div class="stat-value ${m===s.key?'highlight':''}">${s.val}</div>
+    </div>`).join('');
+
+  let stepsHTML = '<div class="step-list">';
+  res.path.slice(0,-1).forEach((n,i)=>{
+    const edge=EDGES.find(e=>e.from===n&&e.to===res.path[i+1]);
+    if(edge) stepsHTML+=`<div class="step-row"><span>${n} → ${res.path[i+1]}</span><span class="step-right">${edge.distance}km · ${edge.time}m · ${edge.fuel}L</span></div>`;
+  });
+  stepsHTML += '</div>';
+
+  div.innerHTML = `
+    <div class="opt-badge">Optimized for ${metricLabel[m]}</div>
+    <div class="panel-label" style="margin-bottom:8px;">Path</div>
+    ${pathHTML}
+    ${statsHTML}
+    <div style="margin-top:12px;padding:12px 14px;background:var(--paper2);border:1px solid var(--line);border-radius:2px;">
+      <div class="steps-header">Path Steps</div>
+      ${stepsHTML}
+    </div>`;
+}
+
+function animatePath(path) {
+  if(animInterval) clearInterval(animInterval);
+  let step = 0;
+  animInterval = setInterval(() => {
+    if(step >= path.length) { clearInterval(animInterval); return; }
+    const n = path[step];
+    updateNodeStyle(n, 'active');
+    const el = document.getElementById('pn-'+n);
+    if(el) el.classList.add('active');
+    step++;
+  }, 380);
+}
+
+function highlightPathEdges(path) {
+  const pathSet = new Set();
+  for(let i=0;i<path.length-1;i++) pathSet.add(`${path[i]}-${path[i+1]}`);
+
+  edgeEls.forEach(({line,arrow,edge,idx}) => {
+    const key    = `${edge.from}-${edge.to}`;
+    const inPath = pathSet.has(key);
+    if(inPath){
+      line.setAttribute('stroke','#b5451b');
+      line.setAttribute('stroke-width','3');
+      line.setAttribute('stroke-opacity','1');
+      line.classList.add('path');
+      arrow.setAttribute('fill','#b5451b');
+      arrow.setAttribute('fill-opacity','1');
+    }
+    const row = document.getElementById('erow-'+idx);
+    if(row){
+      row.className = inPath?'path-row':'';
+      row.querySelectorAll('td').forEach((td,ci)=>{
+        td.className = (inPath && ((currentMetric==='distance'&&ci===2)||(currentMetric==='time'&&ci===3)||(currentMetric==='fuel'&&ci===4))) ? 'hl' : '';
+      });
+    }
+  });
+}
+
+document.getElementById('findBtn').addEventListener('click', () => {
+  const start = startSel.value, end = endSel.value;
+  currentMetric = document.getElementById('metric').value;
+  if(start===end){ renderResult({error:'Start and end must be different nodes.'}); return; }
+  const res = dijkstra(start, end, currentMetric);
+  if(!res){ renderResult({error:'No path found between selected nodes.'}); return; }
+  currentPath = res.path;
+  resetGraph();
+  renderResult(res);
+  highlightPathEdges(res.path);
+  animatePath(res.path);
+});
+</script>
+</body>
+</html>
