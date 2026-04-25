@@ -142,15 +142,23 @@ function mean(arr) {
 }
 
 /**
- * Sample standard deviation (Bessel-corrected, n-1 denominator).
- * Returns 0 for arrays with fewer than 2 values — safe for CV calc.
+ * Sample variance (Bessel-corrected, n-1 denominator).
+ * Returns 0 for arrays with fewer than 2 values.
  */
-function stdDev(arr) {
+function variance(arr) {
     const vals = arr.map(toFiniteNumber).filter(v => v !== null);
     if (vals.length < 2) return 0;
     const avg = mean(vals);
     const sumSq = vals.reduce((s, v) => s + (v - avg) ** 2, 0);
-    return Math.sqrt(sumSq / (vals.length - 1));
+    return sumSq / (vals.length - 1);
+}
+
+/**
+ * Sample standard deviation (Bessel-corrected, n-1 denominator).
+ * Returns 0 for arrays with fewer than 2 values — safe for CV calc.
+ */
+function stdDev(arr) {
+    return Math.sqrt(variance(arr));
 }
 
 /**
