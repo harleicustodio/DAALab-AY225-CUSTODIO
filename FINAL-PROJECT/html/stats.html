@@ -4,7 +4,7 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>Education Statistics Analysis</title>
-    <link rel="stylesheet" href="css/statistics.css">
+    <link rel="stylesheet" href="stats.css">
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -71,7 +71,6 @@
         <div class="flex items-center gap-3">
             <label for="csv-upload" class="cursor-pointer bg-blue-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 transition-all shadow-lg tracking-widest uppercase">UPLOAD DATASET</label>
             <input type="file" id="csv-upload" class="hidden" accept=".csv">
-            <button id="export-btn" onclick="exportCurrentData()" disabled class="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-slate-700 transition-all tracking-widest shadow-lg">EXPORT ANALYSIS</button>
             <button onclick="clearSystem()" class="bg-red-50 text-red-600 border border-red-100 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all">CLEAR</button>
         </div>
     </header>
@@ -186,6 +185,6 @@
     </div>
 </main>
 
-<script src="js/statistics.js"></script>
+<script src="stats.js"></script>
 </body>
 </html>
