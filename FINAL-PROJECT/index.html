@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>World Bank EdStats Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --bg:#0e0f14;--surface:#16181f;--surface2:#1d2030;--surface3:#252840;
+  --border:#2a2d3e;--border2:#363a52;
+  --accent:#4f7cff;--accent2:#8b5cf6;--teal:#2dd4bf;--amber:#f59e0b;--coral:#f87171;
+  --text:#e8eaf6;--text2:#9196b3;--text3:#5a5f7a;
+  --display:'DM Serif Display',Georgia,serif;
+  --mono:'DM Mono','Courier New',monospace;
+  --r:8px;--r2:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* TOP NAV */
+.topbar{
+  position:sticky;top:0;z-index:100;
+  background:rgba(14,15,20,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:24px;
+  padding:0 32px;height:56px;
+}
+.topbar-brand{
+  font-family:var(--display);font-size:1.1rem;color:var(--text);
+  display:flex;align-items:center;gap:10px;white-space:nowrap;
+}
+.topbar-brand .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;animation:pulse 2.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.topbar-nav{display:flex;gap:4px;margin-left:auto}
+.nav-btn{
+  background:none;border:none;cursor:pointer;
+  font-family:var(--mono);font-size:.75rem;color:var(--text2);
+  padding:6px 14px;border-radius:var(--r);transition:.15s;letter-spacing:.5px;
+}
+.nav-btn:hover{color:var(--text);background:var(--surface2)}
+.nav-btn.active{color:var(--accent);background:rgba(79,124,255,.1);border:1px solid rgba(79,124,255,.25)}
+
+/* MAIN LAYOUT */
+main{max-width:1440px;margin:0 auto;padding:32px 32px 80px}
+
+/* HERO UPLOAD ZONE */
+.hero{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:60vh;text-align:center;gap:32px;
+  padding:60px 20px;
+}
+.hero h1{
+  font-family:var(--display);font-size:clamp(2.2rem,5vw,3.8rem);
+  color:var(--text);line-height:1.15;font-weight:400;
+}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero p{color:var(--text2);max-width:540px;line-height:1.8;font-size:.85rem}
+.upload-zone{
+  width:100%;max-width:680px;
+  border:2px dashed var(--border2);border-radius:var(--r2);
+  padding:48px 32px;cursor:pointer;
+  transition:.2s;position:relative;background:var(--surface);
+}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(79,124,255,.05)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-icon{font-size:2.5rem;margin-bottom:16px;line-height:1}
+.upload-zone h3{font-family:var(--display);font-size:1.3rem;color:var(--text);margin-bottom:8px}
+.upload-zone p{font-size:.78rem;color:var(--text3)}
+.upload-zone .file-types{
+  display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap;
+}
+.file-badge{
+  font-size:.65rem;padding:3px 10px;border-radius:20px;letter-spacing:.8px;
+  background:var(--surface2);border:1px solid var(--border2);color:var(--text3);
+}
+.file-badge.active{background:rgba(45,212,191,.1);border-color:var(--teal);color:var(--teal)}
+
+/* DEMO BUTTON */
+.btn-demo{
+  background:none;border:1px solid var(--border2);color:var(--text2);
+  font-family:var(--mono);font-size:.78rem;padding:10px 24px;border-radius:var(--r);
+  cursor:pointer;transition:.2s;letter-spacing:.3px;
+}
+.btn-demo:hover{border-color:var(--accent2);color:var(--accent2)}
+
+/* STATUS BAR */
+.status-bar{
+  display:none;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r2);padding:16px 24px;margin-bottom:24px;
+  display:flex;align-items:center;gap:16px;
+}
+.status-bar.hidden{display:none}
+.progress-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--teal));transition:width .3s;width:0%}
+.status-text{font-size:.75rem;color:var(--text2);white-space:nowrap}
+
+/* DASHBOARD */
+.dashboard{display:none}
+.dashboard.visible{display:block}
+
+/* FILE CHIPS */
+.file-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+.chip{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;padding:5px 14px;font-size:.72rem;color:var(--text2);
+}
+.chip .chip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.chip.loaded .chip-dot{background:var(--teal)}
+.chip.pending .chip-dot{background:var(--text3)}
+
+/* SECTION HEADER */
+.section-hd{
+  display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:20px;padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+.section-hd h2{font-family:var(--display);font-size:1.3rem;font-weight:400;color:var(--text)}
+.section-hd span{font-size:.72rem;color:var(--text3)}
+
+/* STAT CARDS */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:32px}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:20px 18px;position:relative;overflow:hidden;
+}
+.stat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.stat-card.c-blue::before{background:var(--accent)}
+.stat-card.c-teal::before{background:var(--teal)}
+.stat-card.c-purple::before{background:var(--accent2)}
+.stat-card.c-amber::before{background:var(--amber)}
+.stat-card.c-coral::before{background:var(--coral)}
+.stat-label{font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.stat-val{font-family:var(--display);font-size:1.8rem;color:var(--text);line-height:1}
+.stat-sub{font-size:.68rem;color:var(--text3);margin-top:6px}
+
+/* CONTROLS ROW */
+.controls{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r2);padding:16px 20px;margin-bottom:24px;
+}
+.ctrl-group{display:flex;flex-direction:column;gap:4px;min-width:160px}
+.ctrl-label{font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+select,input[type=text]{
+  background:var(--surface2);border:1px solid var(--border2);
+  color:var(--text);font-family:var(--mono);font-size:.78rem;
+  padding:8px 12px;border-radius:var(--r);outline:none;
+  transition:.15s;width:100%;
+}
+select:focus,input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,124,255,.12)}
+select option{background:var(--surface2)}
+.btn{
+  background:var(--surface2);border:1px solid var(--border2);color:var(--text);
+  font-family:var(--mono);font-size:.75rem;padding:8px 18px;border-radius:var(--r);
+  cursor:pointer;transition:.15s;white-space:nowrap;align-self:flex-end;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#3a6ae8}
+
+/* TWO-PANEL LAYOUT */
+.two-panel{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.three-panel{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:20px;margin-bottom:20px}
+@media(max-width:900px){.two-panel,.three-panel{grid-template-columns:1fr}}
+
+/* CHART CARDS */
+.chart-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:22px;
+}
+.chart-card h4{font-family:var(--display);font-size:1rem;font-weight:400;color:var(--text);margin-bottom:4px}
+.chart-card .chart-sub{font-size:.7rem;color:var(--text3);margin-bottom:18px}
+
+/* TABLE */
+.table-wrap{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  overflow:hidden;
+}
+.table-toolbar{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.table-toolbar input{flex:1;min-width:200px;max-width:340px}
+.row-count{margin-left:auto;font-size:.72rem;color:var(--text3)}
+.tscroll{overflow-x:auto;max-height:480px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+thead th{
+  background:var(--surface2);color:var(--text3);text-align:left;
+  padding:10px 14px;font-size:.64rem;letter-spacing:1.5px;text-transform:uppercase;
+  white-space:nowrap;position:sticky;top:0;z-index:2;border-bottom:1px solid var(--border);
+}
+thead th.sortable{cursor:pointer;user-select:none}
+thead th.sortable:hover{color:var(--text)}
+thead th.sorted{color:var(--accent)}
+tbody tr{border-bottom:1px solid var(--border);transition:.1s}
+tbody tr:hover{background:var(--surface2)}
+tbody td{padding:9px 14px;color:var(--text2)}
+tbody td.highlight{color:var(--teal);font-weight:500}
+tbody td.num{color:var(--amber)}
+.empty-row td{text-align:center;padding:48px;color:var(--text3)}
+
+/* ANALYSIS SECTION */
+.analysis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px}
+.analysis-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:20px;
+}
+.analysis-card h4{font-family:var(--display);font-size:.95rem;font-weight:400;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.kv{list-style:none}
+.kv li{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:.77rem}
+.kv li:last-child{border-bottom:none}
+.kv .k{color:var(--text3)}
+.kv .v{color:var(--teal);font-weight:500;text-align:right;max-width:55%;word-break:break-word}
+
+/* TABS */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.tab{
+  background:none;border:none;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:.78rem;color:var(--text3);
+  padding:10px 18px;cursor:pointer;transition:.15s;margin-bottom:-1px;
+}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* INSIGHTS */
+.insights-box{
+  background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r2);
+  padding:28px 32px;margin-top:20px;
+}
+.insights-box h4{font-family:var(--display);font-size:1rem;font-weight:400;color:var(--amber);margin-bottom:14px}
+.insight-text{font-size:.82rem;color:var(--text2);line-height:2;font-style:italic}
+.insight-text .hl{color:var(--text);font-style:normal;font-weight:500}
+
+/* LOADING OVERLAY */
+.overlay{
+  position:fixed;inset:0;background:rgba(14,15,20,.85);z-index:999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+.overlay.hidden{display:none}
+.spinner{
+  width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.overlay p{font-size:.82rem;color:var(--text2)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  main{padding:20px 16px 60px}
+  .topbar{padding:0 16px}
+  .two-panel,.three-panel{grid-template-columns:1fr}
+}
+
+/* FOOTER */
+footer{
+  text-align:center;padding:32px 20px;font-size:.68rem;color:var(--text3);
+  letter-spacing:.5px;border-top:1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div class="overlay hidden" id="overlay">
+  <div class="spinner"></div>
+  <p id="overlayMsg">Processing data…</p>
+</div>
+
+<!-- TOP NAV -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="dot"></span>
+    World Bank <em style="font-family:var(--display);font-style:italic;color:var(--teal)">EdStats</em> Explorer
+  </div>
+  <nav class="topbar-nav">
+    <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+    <button class="nav-btn" onclick="showSection('explore')">Explore</button>
+    <button class="nav-btn" onclick="showSection('compare')">Compare</button>
+    <button class="nav-btn" onclick="showSection('analysis')">Analysis</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ═══ HERO / UPLOAD ═══ -->
+  <section id="hero-section" class="hero">
+    <div>
+      <h1>Explore <em>Education</em><br>Data Worldwide</h1>
+      <p style="margin-top:12px">Upload the World Bank EdStats CSV files to unlock interactive analysis across 4,000+ indicators, 240 countries, and 50+ years of education data.</p>
+    </div>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".csv" multiple/>
+      <div class="upload-icon">📂</div>
+      <h3>Drop EdStats CSV files here</h3>
+      <p>or click to browse · accepts multiple files at once</p>
+      <div class="file-types">
+        <span class="file-badge" id="badge-data">EdStatsData.csv</span>
+        <span class="file-badge" id="badge-country">EdStatsCountry.csv</span>
+        <span class="file-badge" id="badge-series">EdStatsSeries.csv</span>
+        <span class="file-badge" id="badge-footnote">EdStatsFootNote.csv</span>
+        <span class="file-badge" id="badge-cs">EdStatsCountry-Series.csv</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+      <button class="btn-demo" onclick="loadDemoData()">▶ Load Demo Subset (no upload needed)</button>
+      <span style="font-size:.7rem;color:var(--text3)">Uses a curated 200-row sample for instant preview</span>
+    </div>
+
+    <div id="uploadProgress" style="width:100%;max-width:680px;display:none">
+      <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--text3);margin-bottom:6px">
+        <span id="progressLabel">Loading…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </section>
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <div class="dashboard" id="dashboard">
+
+    <!-- File chips -->
+    <div class="file-chips" id="fileChips"></div>
+
+    <!-- ══ OVERVIEW TAB CONTENT ══ -->
+    <section id="sec-overview" class="tab-section">
+      <div class="section-hd">
+        <h2>Global Overview</h2>
+        <span id="overviewSubtitle">—</span>
+      </div>
+
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="three-panel">
+        <div class="chart-card" id="incomeChartCard">
+          <h4>Countries by Income Group</h4>
+          <p class="chart-sub">Distribution of nations in dataset</p>
+          <div style="position:relative;height:200px"><canvas id="incomeChart" role="img" aria-label="Income group distribution"></canvas></div>
+        </div>
+        <div class="chart-card" id="regionChartCard">
+          <h4>Countries by Region</h4>
+          <p class="chart-sub">World Bank regional groupings</p>
+          <div style="position:relative;height:200px"><canvas id="regionChart" role="img" aria-label="Regional distribution"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Indicator Topics</h4>
+          <p class="chart-sub">Series grouped by topic area</p>
+          <div style="position:relative;height:200px"><canvas id="topicChart" role="img" aria-label="Topic distribution"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ EXPLORE ══ -->
+    <section id="sec-explore" class="tab-section" style="display:none">
+      <div class="section-hd">
+        <h2>Data Explorer</h2>
+        <span>Filter, sort and inspect records</span>
+      </div>
+
+      <div class="controls">
+        <div class="ctrl-group" style="flex:1;min-width:200px">
+          <span class="ctrl-label">Indicator</span>
+          <select id="indicatorSelect"><option value="">All indicators…</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Country / Region</span>
+          <select id="countrySelect"><option value="">All countries…</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Year</span>
+          <select id="yearSelect"><option value="">All years…</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Search</span>
+          <input type="text" id="searchInput" placeholder="Type to search…"/>
+        </div>
+        <button class="btn primary" onclick="applyExploreFilters()">Apply</button>
+        <button class="btn" onclick="resetExplore()">Reset</button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span style="font-size:.72rem;color:var(--text2)">Showing filtered data rows</span>
+          <span class="row-count" id="rowCount">— rows</span>
+        </div>
+        <div class="tscroll">
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th class="sortable" onclick="sortTable('Country Name')">Country <span id="srt-cn">↕</span></th>
+                <th class="sortable" onclick="sortTable('Country Code')">Code <span id="srt-cc">↕</span></th>
+                <th class="sortable" onclick="sortTable('Indicator Name')">Indicator <span id="srt-in">↕</span></th>
+                <th>Year</th>
+                <th class="sortable" onclick="sortTable('_value')">Value <span id="srt-v">↕</span></th>
+                <th>Region</th>
+                <th>Income Group</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr class="empty-row"><td colspan="7">Load data to begin exploring</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ COMPARE ══ -->
+    <section id="sec-compare" class="tab-section" style="display:none">
+      <div class="section-hd">
+        <h2>Country Comparison</h2>
+        <span>Compare an indicator across countries over time</span>
+      </div>
+
+      <div class="controls">
+        <div class="ctrl-group" style="flex:2;min-width:260px">
+          <span class="ctrl-label">Indicator to compare</span>
+          <select id="cmpIndicator"><option value="">Select an indicator…</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Country A</span>
+          <select id="cmpCountryA"><option value="">—</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Country B</span>
+          <select id="cmpCountryB"><option value="">—</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Country C (optional)</span>
+          <select id="cmpCountryC"><option value="">—</option></select>
+        </div>
+        <button class="btn primary" onclick="runComparison()">Compare</button>
+      </div>
+
+      <div class="chart-card">
+        <h4 id="cmpChartTitle">Select indicator and countries above</h4>
+        <p class="chart-sub" id="cmpChartSub">Up to 3 countries · all available years</p>
+        <div style="position:relative;height:320px">
+          <canvas id="cmpChart" role="img" aria-label="Country comparison line chart"></canvas>
+        </div>
+      </div>
+
+      <div class="two-panel" style="margin-top:20px">
+        <div class="analysis-card" id="cmpStatsA"></div>
+        <div class="analysis-card" id="cmpStatsB"></div>
+      </div>
+    </section>
+
+    <!-- ══ ANALYSIS ══ -->
+    <section id="sec-analysis" class="tab-section" style="display:none">
+      <div class="section-hd">
+        <h2>Statistical Analysis</h2>
+        <span>Descriptive stats · distribution · outliers</span>
+      </div>
+
+      <div class="controls">
+        <div class="ctrl-group" style="flex:2;min-width:260px">
+          <span class="ctrl-label">Indicator</span>
+          <select id="anIndicator"><option value="">Select an indicator…</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Year</span>
+          <select id="anYear"><option value="">Latest available</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Group by</span>
+          <select id="anGroup">
+            <option value="region">Region</option>
+            <option value="income">Income Group</option>
+          </select>
+        </div>
+        <button class="btn primary" onclick="runAnalysis()">Analyze</button>
+      </div>
+
+      <div class="analysis-grid" id="analysisCards"></div>
+
+      <div class="two-panel">
+        <div class="chart-card">
+          <h4>Distribution by Group</h4>
+          <p class="chart-sub" id="anChartSub">Select indicator and run analysis</p>
+          <div style="position:relative;height:280px">
+            <canvas id="anBarChart" role="img" aria-label="Distribution bar chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>Top 10 Countries</h4>
+          <p class="chart-sub">Highest values for selected indicator + year</p>
+          <div style="position:relative;height:280px">
+            <canvas id="anTopChart" role="img" aria-label="Top 10 countries chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="insights-box">
+        <h4>✦ Auto-generated Insights</h4>
+        <div id="insightsBody">
+          <p class="insight-text" style="color:var(--text3)">Run an analysis above to generate data-driven insights.</p>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /dashboard -->
+</main>
+
+<footer>
+  WORLD BANK EDSTATS EXPLORER &nbsp;·&nbsp; DATA: WORLD BANK OPEN DATA PLATFORM &nbsp;·&nbsp;
+  <a href="https://datatopics.worldbank.org/education/" style="color:var(--text3)">datatopics.worldbank.org/education</a>
+</footer>
+
+<script>
+"use strict";
+
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+const STATE = {
+  rawData: [],          // EdStatsData rows (wide → melted)
+  countries: {},        // code → {region, income, name}
+  series: {},           // code → {topic, indicatorName}
+  filtered: [],
+  sortCol: '',
+  sortDir: 1,
+  charts: {},
+  currentSection: 'overview',
+  filesLoaded: new Set()
+};
+
+/* ═══════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════ */
+function $(id){ return document.getElementById(id) }
+function setHTML(id,html){ const el=$(id); if(el) el.innerHTML=html }
+function show(id){ const el=$(id); if(el) el.style.display='' }
+function hide(id){ const el=$(id); if(el) el.style.display='none' }
+function showOverlay(msg){ $('overlay').classList.remove('hidden'); $('overlayMsg').textContent=msg||'Processing…' }
+function hideOverlay(){ $('overlay').classList.add('hidden') }
+
+function fmt(v,digits=2){
+  if(v===null||v===undefined||v==='') return '—';
+  const n=parseFloat(v);
+  if(isNaN(n)) return v;
+  return n.toLocaleString(undefined,{maximumFractionDigits:digits,minimumFractionDigits:0});
+}
+
+function mean(arr){ return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0 }
+function median(arr){
+  if(!arr.length) return 0;
+  const s=[...arr].sort((a,b)=>a-b);
+  const m=Math.floor(s.length/2);
+  return s.length%2===0?(s[m-1]+s[m])/2:s[m];
+}
+function stdDev(arr){
+  if(!arr.length) return 0;
+  const m=mean(arr);
+  return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length);
+}
+
+function destroyChart(id){
+  if(STATE.charts[id]){ STATE.charts[id].destroy(); delete STATE.charts[id] }
+}
+
+const CHART_COLORS = ['#4f7cff','#2dd4bf','#8b5cf6','#f59e0b','#f87171','#34d399','#fb923c','#a78bfa'];
+
+function chartDefaults(){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{labels:{color:'#9196b3',font:{family:'DM Mono',size:11},boxWidth:10,padding:14}},
+      tooltip:{backgroundColor:'#1d2030',borderColor:'#2a2d3e',borderWidth:1,
+        titleColor:'#e8eaf6',bodyColor:'#9196b3',
+        titleFont:{family:'DM Mono'},bodyFont:{family:'DM Mono',size:11}}
+    },
+    scales:{
+      x:{ticks:{color:'#5a5f7a',font:{family:'DM Mono',size:10}},grid:{color:'#1d2030'}},
+      y:{ticks:{color:'#5a5f7a',font:{family:'DM Mono',size:10}},grid:{color:'#1d2030'}}
+    }
+  };
+}
+
+/* ═══════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════ */
+function showSection(name){
+  ['overview','explore','compare','analysis'].forEach(s=>{
+    const el=$(`sec-${s}`);
+    if(el) el.style.display = s===name?'':'none';
+  });
+  document.querySelectorAll('.nav-btn').forEach((btn,i)=>{
+    const names=['overview','explore','compare','analysis'];
+    btn.classList.toggle('active', names[i]===name);
+  });
+  STATE.currentSection=name;
+}
+
+/* ═══════════════════════════════════════════════
+   FILE UPLOAD
+═══════════════════════════════════════════════ */
+$('uploadZone').addEventListener('dragover', e=>{e.preventDefault();$('uploadZone').classList.add('drag')});
+$('uploadZone').addEventListener('dragleave', ()=>$('uploadZone').classList.remove('drag'));
+$('uploadZone').addEventListener('drop', e=>{
+  e.preventDefault();$('uploadZone').classList.remove('drag');
+  handleFiles([...e.dataTransfer.files]);
+});
+$('fileInput').addEventListener('change', e=>handleFiles([...e.target.files]));
+
+function handleFiles(files){
+  if(!files.length) return;
+  showProgress();
+  let processed=0;
+  const total=files.length;
+
+  files.forEach(file=>{
+    const name=file.name.toLowerCase();
+    Papa.parse(file,{
+      header:true,
+      skipEmptyLines:true,
+      worker:false,
+      complete(res){
+        processed++;
+        setProgress(Math.round(processed/total*100), `Parsing ${file.name}…`);
+
+        if(name.includes('edstatscountry') && !name.includes('series')){
+          processCountryFile(res.data);
+          STATE.filesLoaded.add('country');
+          markBadge('badge-country');
+        } else if(name.includes('edstatsseries') && !name.includes('country')){
+          processSeriesFile(res.data);
+          STATE.filesLoaded.add('series');
+          markBadge('badge-series');
+        } else if(name.includes('edstatsdata')){
+          processDataFile(res.data);
+          STATE.filesLoaded.add('data');
+          markBadge('badge-data');
+        } else if(name.includes('footnote')){
+          STATE.filesLoaded.add('footnote');
+          markBadge('badge-footnote');
+        } else if(name.includes('country-series')){
+          STATE.filesLoaded.add('cs');
+          markBadge('badge-cs');
+        }
+
+        if(processed===total){
+          setTimeout(()=>{ hideProgress(); launchDashboard(); }, 300);
+        }
+      },
+      error(err){ console.error(err); processed++; }
+    });
+  });
+}
+
+function markBadge(id){
+  const el=$(id); if(el){ el.classList.add('active'); el.textContent='✓ '+el.textContent.replace('✓ ','') }
+}
+function showProgress(){
+  $('uploadProgress').style.display='block';
+}
+function hideProgress(){
+  $('uploadProgress').style.display='none';
+}
+function setProgress(pct,label){
+  $('progressFill').style.width=pct+'%';
+  $('progressPct').textContent=pct+'%';
+  $('progressLabel').textContent=label||'Loading…';
+}
+
+/* ═══════════════════════════════════════════════
+   DATA PROCESSORS
+═══════════════════════════════════════════════ */
+const YEARS = [];
+for(let y=1970;y<=2025;y++) YEARS.push(String(y));
+
+function processCountryFile(rows){
+  rows.forEach(r=>{
+    const code = r['Country Code']||r['Country code']||'';
+    if(code){
+      STATE.countries[code]={
+        name: r['Short Name']||r['Table Name']||code,
+        region: r['Region']||'',
+        income: r['Income Group']||''
+      };
+    }
+  });
+}
+
+function processSeriesFile(rows){
+  rows.forEach(r=>{
+    const code = r['Series Code']||'';
+    if(code){
+      STATE.series[code]={
+        indicatorName: r['Indicator Name']||code,
+        topic: r['Topic']||''
+      };
+    }
+  });
+}
+
+function processDataFile(rows){
+  // Melt wide → long (take only years with actual values)
+  const melted=[];
+  const SAMPLE_LIMIT = 50000; // performance cap for browser
+  let count=0;
+  for(const row of rows){
+    if(count>=SAMPLE_LIMIT) break;
+    const cName = row['Country Name']||'';
+    const cCode = row['Country Code']||'';
+    const iName = row['Indicator Name']||'';
+    const iCode = row['Indicator Code']||'';
+    for(const yr of YEARS){
+      const v = row[yr];
+      if(v!==undefined && v!==null && v!==''){
+        const num=parseFloat(v);
+        if(!isNaN(num)){
+          melted.push({
+            'Country Name':cName,
+            'Country Code':cCode,
+            'Indicator Name':iName,
+            'Indicator Code':iCode,
+            '_year':yr,
+            '_value':num
+          });
+          count++;
+          if(count>=SAMPLE_LIMIT) break;
+        }
+      }
+    }
+  }
+  STATE.rawData = melted;
+  STATE.filtered = melted;
+}
+
+/* ═══════════════════════════════════════════════
+   DEMO DATA (built-in subset)
+═══════════════════════════════════════════════ */
+function loadDemoData(){
+  showProgress(); setProgress(10,'Building demo dataset…');
+
+  // Built-in country metadata
+  STATE.countries = {
+    'USA':{name:'United States',region:'North America',income:'High income: OECD'},
+    'GBR':{name:'United Kingdom',region:'Europe & Central Asia',income:'High income: OECD'},
+    'DEU':{name:'Germany',region:'Europe & Central Asia',income:'High income: OECD'},
+    'JPN':{name:'Japan',region:'East Asia & Pacific',income:'High income: OECD'},
+    'CHN':{name:'China',region:'East Asia & Pacific',income:'Upper middle income'},
+    'IND':{name:'India',region:'South Asia',income:'Lower middle income'},
+    'BRA':{name:'Brazil',region:'Latin America & Caribbean',income:'Upper middle income'},
+    'ZAF':{name:'South Africa',region:'Sub-Saharan Africa',income:'Upper middle income'},
+    'MEX':{name:'Mexico',region:'Latin America & Caribbean',income:'Upper middle income'},
+    'IDN':{name:'Indonesia',region:'East Asia & Pacific',income:'Lower middle income'},
+    'NGA':{name:'Nigeria',region:'Sub-Saharan Africa',income:'Lower middle income'},
+    'ETH':{name:'Ethiopia',region:'Sub-Saharan Africa',income:'Low income'},
+    'PAK':{name:'Pakistan',region:'South Asia',income:'Lower middle income'},
+    'BGD':{name:'Bangladesh',region:'South Asia',income:'Lower middle income'},
+    'PHL':{name:'Philippines',region:'East Asia & Pacific',income:'Lower middle income'},
+    'VNM':{name:'Vietnam',region:'East Asia & Pacific',income:'Lower middle income'},
+    'THA':{name:'Thailand',region:'East Asia & Pacific',income:'Upper middle income'},
+    'ARG':{name:'Argentina',region:'Latin America & Caribbean',income:'Upper middle income'},
+    'COL':{name:'Colombia',region:'Latin America & Caribbean',income:'Upper middle income'},
+    'EGY':{name:'Egypt',region:'Middle East & North Africa',income:'Lower middle income'},
+  };
+
+  STATE.series = {
+    'SE.ADT.LITR.ZS':{indicatorName:'Literacy rate, adult total (% of people ages 15+)',topic:'Literacy'},
+    'SE.PRM.NENR':{indicatorName:'School enrollment, primary (% net)',topic:'Access'},
+    'SE.SEC.NENR':{indicatorName:'School enrollment, secondary (% net)',topic:'Access'},
+    'SE.TER.ENRR':{indicatorName:'School enrollment, tertiary (% gross)',topic:'Access'},
+    'SE.XPD.TOTL.GD.ZS':{indicatorName:'Government expenditure on education, total (% of GDP)',topic:'Expenditures'},
+    'SE.PRM.CMPT.ZS':{indicatorName:'Primary completion rate, total (% of relevant age group)',topic:'Completion'},
+    'UIS.PTRHC.1':{indicatorName:'Pupil-teacher ratio, primary',topic:'Teachers'},
+    'SE.ADT.1524.LT.ZS':{indicatorName:'Literacy rate, youth total (% of people ages 15-24)',topic:'Literacy'},
+  };
+
+  // Generate synthetic demo data
+  const COUNTRIES = Object.keys(STATE.countries);
+  const INDICATORS = Object.keys(STATE.series);
+  const baseValues = {
+    'SE.ADT.LITR.ZS':{USA:99,GBR:99,DEU:99,JPN:99,CHN:96,IND:74,BRA:93,ZAF:87,MEX:95,IDN:96,NGA:62,ETH:51,PAK:59,BGD:72,PHL:96,VNM:95,THA:93,ARG:99,COL:95,EGY:74},
+    'SE.PRM.NENR':{USA:92,GBR:98,DEU:97,JPN:99,CHN:94,IND:88,BRA:91,ZAF:84,MEX:94,IDN:90,NGA:63,ETH:79,PAK:72,BGD:87,PHL:91,VNM:96,THA:91,ARG:97,COL:89,EGY:91},
+    'SE.SEC.NENR':{USA:88,GBR:91,DEU:89,JPN:93,CHN:79,IND:51,BRA:72,ZAF:71,MEX:68,IDN:65,NGA:41,ETH:29,PAK:34,BGD:54,PHL:68,VNM:71,THA:76,ARG:84,COL:72,EGY:79},
+    'SE.TER.ENRR':{USA:88,GBR:61,DEU:70,JPN:64,CHN:51,IND:28,BRA:51,ZAF:22,MEX:38,IDN:36,NGA:10,ETH:9,PAK:9,BGD:18,PHL:35,VNM:30,THA:49,ARG:89,COL:57,EGY:34},
+    'SE.XPD.TOTL.GD.ZS':{USA:5.0,GBR:5.5,DEU:4.9,JPN:3.6,CHN:3.8,IND:3.8,BRA:6.3,ZAF:6.2,MEX:4.3,IDN:3.3,NGA:0.5,ETH:4.7,PAK:2.9,BGD:2.0,PHL:3.3,VNM:4.3,THA:4.1,ARG:5.1,COL:4.5,EGY:3.8},
+    'SE.PRM.CMPT.ZS':{USA:98,GBR:99,DEU:99,JPN:99,CHN:97,IND:91,BRA:96,ZAF:83,MEX:97,IDN:95,NGA:67,ETH:60,PAK:67,BGD:83,PHL:95,VNM:98,THA:97,ARG:99,COL:96,EGY:94},
+    'UIS.PTRHC.1':{USA:15,GBR:18,DEU:12,JPN:16,CHN:17,IND:35,BRA:21,ZAF:32,MEX:27,IDN:15,NGA:38,ETH:53,PAK:41,BGD:39,PHL:28,VNM:20,THA:17,ARG:14,COL:25,EGY:27},
+    'SE.ADT.1524.LT.ZS':{USA:99,GBR:99,DEU:99,JPN:99,CHN:99,IND:90,BRA:99,ZAF:95,MEX:98,IDN:99,NGA:72,ETH:71,PAK:74,BGD:89,PHL:98,VNM:97,THA:98,ARG:99,COL:99,EGY:89},
+  };
+
+  const melted=[];
+  const years=[2000,2005,2010,2015,2018,2020,2022];
+  COUNTRIES.forEach(cc=>{
+    INDICATORS.forEach(ic=>{
+      const base = (baseValues[ic]||{})[cc]||50;
+      years.forEach(yr=>{
+        const drift = (yr-2000)*(Math.random()*.6-.1);
+        const noise = (Math.random()-.5)*4;
+        let val = Math.max(0,Math.min(ic==='UIS.PTRHC.1'?60:100, base+drift+noise));
+        val = Math.round(val*10)/10;
+        melted.push({
+          'Country Name':STATE.countries[cc].name,
+          'Country Code':cc,
+          'Indicator Name':STATE.series[ic].indicatorName,
+          'Indicator Code':ic,
+          '_year':String(yr),
+          '_value':val
+        });
+      });
+    });
+  });
+
+  STATE.rawData = melted;
+  STATE.filtered = melted;
+  STATE.filesLoaded = new Set(['data','country','series']);
+
+  setTimeout(()=>{ hideProgress(); launchDashboard(); },400);
+}
+
+/* ═══════════════════════════════════════════════
+   LAUNCH DASHBOARD
+═══════════════════════════════════════════════ */
+function launchDashboard(){
+  // Enrich data with country metadata
+  STATE.rawData.forEach(r=>{
+    const c = STATE.countries[r['Country Code']]||{};
+    r._region = c.region||'Unknown';
+    r._income = c.income||'Unknown';
+  });
+  STATE.filtered = [...STATE.rawData];
+
+  hide('hero-section');
+  $('dashboard').classList.add('visible');
+
+  buildFileChips();
+  populateDropdowns();
+  buildOverview();
+  showSection('overview');
+}
+
+function buildFileChips(){
+  const files=[
+    {id:'data',label:'EdStatsData.csv'},
+    {id:'country',label:'EdStatsCountry.csv'},
+    {id:'series',label:'EdStatsSeries.csv'},
+    {id:'footnote',label:'EdStatsFootNote.csv'},
+    {id:'cs',label:'EdStatsCountry-Series.csv'},
+  ];
+  $('fileChips').innerHTML = files.map(f=>`
+    <div class="chip ${STATE.filesLoaded.has(f.id)?'loaded':'pending'}">
+      <span class="chip-dot"></span>${f.label}
+      ${STATE.filesLoaded.has(f.id)?'<span style="color:var(--teal)">✓</span>':'<span style="color:var(--text3)">—</span>'}
+    </div>
+  `).join('');
+}
+
+function populateDropdowns(){
+  const indicators = [...new Set(STATE.rawData.map(r=>r['Indicator Name']))].sort();
+  const countries  = [...new Set(STATE.rawData.map(r=>r['Country Name']))].sort();
+  const years      = [...new Set(STATE.rawData.map(r=>r._year))].sort();
+
+  const indOpts = indicators.slice(0,200).map(i=>`<option value="${esc(i)}">${esc(i)}</option>`).join('');
+  const cntOpts = countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const yrOpts  = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+
+  ['indicatorSelect','cmpIndicator','anIndicator'].forEach(id=>{
+    const el=$(id); if(el) el.innerHTML = `<option value="">All indicators…</option>${indOpts}`;
+  });
+  ['countrySelect','cmpCountryA','cmpCountryB','cmpCountryC'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    el.innerHTML = `<option value="">—</option>${cntOpts}`;
+  });
+  $('yearSelect').innerHTML = `<option value="">All years</option>${yrOpts}`;
+  $('anYear').innerHTML = `<option value="">Latest available</option>${yrOpts}`;
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+/* ═══════════════════════════════════════════════
+   OVERVIEW
+═══════════════════════════════════════════════ */
+function buildOverview(){
+  const d = STATE.rawData;
+  const uniqueCountries = [...new Set(d.map(r=>r['Country Code']))];
+  const uniqueIndicators = [...new Set(d.map(r=>r['Indicator Code']))];
+  const uniqueYears = [...new Set(d.map(r=>r._year))];
+
+  $('overviewSubtitle').textContent = `${d.length.toLocaleString()} data points loaded`;
+
+  $('statGrid').innerHTML = `
+    <div class="stat-card c-blue">
+      <div class="stat-label">Data Points</div>
+      <div class="stat-val">${fmtK(d.length)}</div>
+      <div class="stat-sub">rows loaded</div>
+    </div>
+    <div class="stat-card c-teal">
+      <div class="stat-label">Countries</div>
+      <div class="stat-val">${uniqueCountries.length}</div>
+      <div class="stat-sub">unique country codes</div>
+    </div>
+    <div class="stat-card c-purple">
+      <div class="stat-label">Indicators</div>
+      <div class="stat-val">${uniqueIndicators.length}</div>
+      <div class="stat-sub">unique series</div>
+    </div>
+    <div class="stat-card c-amber">
+      <div class="stat-label">Years Covered</div>
+      <div class="stat-val">${uniqueYears.length}</div>
+      <div class="stat-sub">${uniqueYears[0]||'—'} – ${uniqueYears[uniqueYears.length-1]||'—'}</div>
+    </div>
+    <div class="stat-card c-coral">
+      <div class="stat-label">Avg Value</div>
+      <div class="stat-val">${fmt(mean(d.map(r=>r._value)),1)}</div>
+      <div class="stat-sub">across all indicators</div>
+    </div>
+  `;
+
+  buildIncomeDoughnut();
+  buildRegionDoughnut();
+  buildTopicBar();
+}
+
+function fmtK(n){
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000) return (n/1000).toFixed(1)+'K';
+  return n;
+}
+
+function buildIncomeDoughnut(){
+  const counts={};
+  Object.values(STATE.countries).forEach(c=>{ if(c.income){ counts[c.income]=(counts[c.income]||0)+1 } });
+  // also from data
+  STATE.rawData.forEach(r=>{ if(r._income&&r._income!=='Unknown') counts[r._income]=counts[r._income]||1 });
+  const labels=Object.keys(counts);
+  const data=Object.values(counts);
+  destroyChart('incomeChart');
+  const opts=chartDefaults();
+  opts.scales={};
+  opts.plugins.legend.position='bottom';
+  opts.plugins.legend.labels.boxWidth=8;
+  STATE.charts['incomeChart']=new Chart($('incomeChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:CHART_COLORS,borderColor:CHART_COLORS,borderWidth:2,hoverOffset:4}]},
+    options:{...opts,cutout:'58%'}
+  });
+}
+
+function buildRegionDoughnut(){
+  const counts={};
+  STATE.rawData.forEach(r=>{ if(r._region&&r._region!=='Unknown') counts[r._region]=(counts[r._region]||0)+1 });
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const labels=sorted.map(x=>x[0].split('&')[0].trim());
+  const data=sorted.map(x=>x[1]);
+  destroyChart('regionChart');
+  const opts=chartDefaults();
+  opts.scales={};
+  opts.plugins.legend.position='bottom';
+  opts.plugins.legend.labels.boxWidth=8;
+  STATE.charts['regionChart']=new Chart($('regionChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:CHART_COLORS,borderWidth:2,hoverOffset:4}]},
+    options:{...opts,cutout:'58%'}
+  });
+}
+
+function buildTopicBar(){
+  const counts={};
+  Object.values(STATE.series).forEach(s=>{ const t=(s.topic||'Other').split(':')[0].trim(); counts[t]=(counts[t]||0)+1 });
+  // if no series loaded, use indicator names
+  if(!Object.keys(counts).length){
+    STATE.rawData.forEach(r=>{
+      const t=(r['Indicator Name']||'Other').slice(0,20);
+      counts[t]=(counts[t]||0)+1;
+    });
+  }
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const labels=sorted.map(x=>x[0]);
+  const data=sorted.map(x=>x[1]);
+  destroyChart('topicChart');
+  const opts=chartDefaults();
+  opts.indexAxis='y';
+  opts.plugins.legend={display:false};
+  opts.scales.x.ticks.color='#5a5f7a';
+  opts.scales.y.ticks.color='#9196b3';
+  opts.scales.y.ticks.font={size:10,family:'DM Mono'};
+  STATE.charts['topicChart']=new Chart($('topicChart').getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:'rgba(79,124,255,.7)',borderColor:'#4f7cff',borderWidth:1}]},
+    options:opts
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   EXPLORE TAB
+═══════════════════════════════════════════════ */
+function applyExploreFilters(){
+  let data = [...STATE.rawData];
+  const ind = $('indicatorSelect').value;
+  const cnt = $('countrySelect').value;
+  const yr  = $('yearSelect').value;
+  const q   = $('searchInput').value.toLowerCase().trim();
+
+  if(ind) data = data.filter(r=>r['Indicator Name']===ind);
+  if(cnt) data = data.filter(r=>r['Country Name']===cnt);
+  if(yr)  data = data.filter(r=>r._year===yr);
+  if(q)   data = data.filter(r=>
+    r['Country Name'].toLowerCase().includes(q)||
+    r['Indicator Name'].toLowerCase().includes(q)||
+    r['Country Code'].toLowerCase().includes(q)
+  );
+
+  STATE.filtered = data;
+  renderTable(data);
+}
+
+function resetExplore(){
+  $('indicatorSelect').value='';
+  $('countrySelect').value='';
+  $('yearSelect').value='';
+  $('searchInput').value='';
+  STATE.filtered=[...STATE.rawData];
+  renderTable(STATE.filtered);
+}
+
+function renderTable(data){
+  const LIMIT=500;
+  const shown=data.slice(0,LIMIT);
+  $('rowCount').textContent=`${data.length.toLocaleString()} rows${data.length>LIMIT?' (showing first '+LIMIT+')':''}`;
+
+  if(!data.length){
+    $('tableBody').innerHTML='<tr class="empty-row"><td colspan="7">No results found.</td></tr>';
+    return;
+  }
+
+  $('tableBody').innerHTML = shown.map(r=>`
+    <tr>
+      <td class="highlight">${esc(r['Country Name'])}</td>
+      <td>${esc(r['Country Code'])}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r['Indicator Name'])}">${esc(r['Indicator Name'])}</td>
+      <td class="num">${r._year}</td>
+      <td class="num">${fmt(r._value)}</td>
+      <td>${esc(r._region||'')}</td>
+      <td>${esc(r._income||'')}</td>
+    </tr>
+  `).join('');
+}
+
+let _sortDir = 1;
+function sortTable(col){
+  _sortDir *= -1;
+  STATE.filtered.sort((a,b)=>{
+    const va=a[col]??'', vb=b[col]??'';
+    if(col==='_value') return (parseFloat(va)-parseFloat(vb))*_sortDir;
+    return String(va).localeCompare(String(vb))*_sortDir;
+  });
+  renderTable(STATE.filtered);
+}
+
+/* ═══════════════════════════════════════════════
+   COMPARE TAB
+═══════════════════════════════════════════════ */
+function runComparison(){
+  const ind = $('cmpIndicator').value;
+  const cA  = $('cmpCountryA').value;
+  const cB  = $('cmpCountryB').value;
+  const cC  = $('cmpCountryC').value;
+
+  if(!ind||!cA||!cB){ alert('Please select an indicator and at least 2 countries.'); return; }
+
+  const countries = [cA,cB,cC].filter(Boolean);
+  const datasets = [];
+  const allYears = [...new Set(STATE.rawData.filter(r=>r['Indicator Name']===ind).map(r=>r._year))].sort();
+
+  countries.forEach((cn,i)=>{
+    const rows = STATE.rawData.filter(r=>r['Indicator Name']===ind && r['Country Name']===cn);
+    const vals = allYears.map(yr=>{
+      const r=rows.find(x=>x._year===yr);
+      return r?r._value:null;
+    });
+    datasets.push({
+      label:cn, data:vals,
+      borderColor:CHART_COLORS[i],
+      backgroundColor:CHART_COLORS[i]+'22',
+      fill:true, tension:.3,
+      pointRadius:4, pointHoverRadius:6,
+      borderWidth:2,
+      spanGaps:true
+    });
+  });
+
+  $('cmpChartTitle').textContent = ind;
+  $('cmpChartSub').textContent = `${countries.join(' · ')} · ${allYears[0]}–${allYears[allYears.length-1]}`;
+
+  destroyChart('cmpChart');
+  const opts = chartDefaults();
+  STATE.charts['cmpChart'] = new Chart($('cmpChart').getContext('2d'),{
+    type:'line',
+    data:{labels:allYears, datasets},
+    options:opts
+  });
+
+  // Stats panels
+  [cA,cB].forEach((cn,idx)=>{
+    const rows = STATE.rawData.filter(r=>r['Indicator Name']===ind && r['Country Name']===cn);
+    const vals = rows.map(r=>r._value);
+    const el = $(`cmpStats${idx===0?'A':'B'}`);
+    if(!el||!vals.length) return;
+    el.innerHTML=`
+      <h4>${cn}</h4>
+      <ul class="kv">
+        <li><span class="k">Data points</span><span class="v">${vals.length}</span></li>
+        <li><span class="k">Latest value</span><span class="v">${fmt(vals[vals.length-1])}</span></li>
+        <li><span class="k">Mean</span><span class="v">${fmt(mean(vals),2)}</span></li>
+        <li><span class="k">Min / Max</span><span class="v">${fmt(Math.min(...vals))} / ${fmt(Math.max(...vals))}</span></li>
+        <li><span class="k">Std Dev</span><span class="v">${fmt(stdDev(vals),2)}</span></li>
+        <li><span class="k">Trend</span><span class="v">${vals.length>1?(vals[vals.length-1]>vals[0]?'↑ Rising':'↓ Falling'):'—'}</span></li>
+      </ul>
+    `;
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   ANALYSIS TAB
+═══════════════════════════════════════════════ */
+function runAnalysis(){
+  const ind   = $('anIndicator').value;
+  const yr    = $('anYear').value;
+  const group = $('anGroup').value;
+
+  if(!ind){ alert('Please select an indicator.'); return; }
+
+  let rows = STATE.rawData.filter(r=>r['Indicator Name']===ind);
+
+  // Pick year
+  let useYear = yr;
+  if(!useYear){
+    const years=[...new Set(rows.map(r=>r._year))].sort();
+    useYear = years[years.length-1];
+  }
+  rows = rows.filter(r=>r._year===useYear);
+
+  if(!rows.length){ alert('No data for this selection.'); return; }
+
+  const vals = rows.map(r=>r._value);
+  const m=mean(vals), med=median(vals), sd=stdDev(vals);
+  const mn=Math.min(...vals), mx=Math.max(...vals);
+
+  // Cards
+  $('analysisCards').innerHTML=`
+    <div class="analysis-card">
+      <h4>Descriptive Statistics</h4>
+      <ul class="kv">
+        <li><span class="k">Countries (n)</span><span class="v">${rows.length}</span></li>
+        <li><span class="k">Year</span><span class="v">${useYear}</span></li>
+        <li><span class="k">Mean</span><span class="v">${fmt(m,2)}</span></li>
+        <li><span class="k">Median</span><span class="v">${fmt(med,2)}</span></li>
+        <li><span class="k">Min</span><span class="v">${fmt(mn,2)}</span></li>
+        <li><span class="k">Max</span><span class="v">${fmt(mx,2)}</span></li>
+        <li><span class="k">Range</span><span class="v">${fmt(mx-mn,2)}</span></li>
+        <li><span class="k">Std Dev</span><span class="v">${fmt(sd,2)}</span></li>
+      </ul>
+    </div>
+    <div class="analysis-card">
+      <h4>Distribution Summary</h4>
+      <ul class="kv">
+        <li><span class="k">Below mean</span><span class="v">${vals.filter(v=>v<m).length} countries (${Math.round(vals.filter(v=>v<m).length/vals.length*100)}%)</span></li>
+        <li><span class="k">Above mean</span><span class="v">${vals.filter(v=>v>m).length} countries (${Math.round(vals.filter(v=>v>m).length/vals.length*100)}%)</span></li>
+        <li><span class="k">Coefficient of var.</span><span class="v">${fmt(sd/m*100,1)}%</span></li>
+        <li><span class="k">Outliers (±2σ)</span><span class="v">${vals.filter(v=>Math.abs(v-m)>2*sd).length}</span></li>
+        <li><span class="k">Skewness direction</span><span class="v">${m>med?'Right-skewed':'Left-skewed'}</span></li>
+      </ul>
+    </div>
+    <div class="analysis-card">
+      <h4>Extremes</h4>
+      <ul class="kv">
+        ${rows.sort((a,b)=>b._value-a._value).slice(0,5).map(r=>`<li><span class="k">${esc(r['Country Name'])}</span><span class="v">${fmt(r._value,2)}</span></li>`).join('')}
+      </ul>
+    </div>
+  `;
+
+  // Group bar chart
+  const groupKey = group==='region'?'_region':'_income';
+  const groups={};
+  rows.forEach(r=>{
+    const g=r[groupKey]||'Other';
+    if(!groups[g]) groups[g]=[];
+    groups[g].push(r._value);
+  });
+  const gLabels=Object.keys(groups);
+  const gMeans=gLabels.map(g=>parseFloat(mean(groups[g]).toFixed(2)));
+
+  $('anChartSub').textContent = `${ind} · ${useYear} · by ${group}`;
+  destroyChart('anBarChart');
+  const opts1=chartDefaults();
+  opts1.plugins.legend={display:false};
+  STATE.charts['anBarChart']=new Chart($('anBarChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:gLabels,datasets:[{data:gMeans,backgroundColor:CHART_COLORS,borderColor:CHART_COLORS,borderWidth:1}]},
+    options:opts1
+  });
+
+  // Top 10 chart
+  const top10=[...rows].sort((a,b)=>b._value-a._value).slice(0,10);
+  destroyChart('anTopChart');
+  const opts2=chartDefaults();
+  opts2.indexAxis='y';
+  opts2.plugins.legend={display:false};
+  STATE.charts['anTopChart']=new Chart($('anTopChart').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:top10.map(r=>r['Country Name']),
+      datasets:[{data:top10.map(r=>r._value),backgroundColor:'rgba(45,212,191,.75)',borderColor:'#2dd4bf',borderWidth:1}]
+    },
+    options:opts2
+  });
+
+  // Insights
+  const highest=rows.sort((a,b)=>b._value-a._value)[0];
+  const lowest=[...rows].sort((a,b)=>a._value-b._value)[0];
+  const topRegion=gLabels[gMeans.indexOf(Math.max(...gMeans))];
+  const btmRegion=gLabels[gMeans.indexOf(Math.min(...gMeans))];
+
+  $('insightsBody').innerHTML=`<p class="insight-text">
+    For <span class="hl">${esc(ind)}</span> in <span class="hl">${useYear}</span>,
+    the dataset covers <span class="hl">${rows.length} countries</span> with a mean value of
+    <span class="hl">${fmt(m,2)}</span> and a median of <span class="hl">${fmt(med,2)}</span>.
+    The highest performer is <span class="hl">${esc(highest?.['Country Name']||'—')}</span>
+    at <span class="hl">${fmt(highest?._value,2)}</span>, while
+    <span class="hl">${esc(lowest?.['Country Name']||'—')}</span> records the lowest value of
+    <span class="hl">${fmt(lowest?._value,2)}</span> — a gap of
+    <span class="hl">${fmt(mx-mn,2)}</span>.
+    The standard deviation of <span class="hl">${fmt(sd,2)}</span>
+    (coefficient of variation: <span class="hl">${fmt(sd/m*100,1)}%</span>)
+    suggests ${sd/m>.4?'high':'moderate'} dispersion across countries.
+    By ${group}, <span class="hl">${esc(topRegion||'—')}</span> leads with a group average of
+    <span class="hl">${fmt(gMeans[gLabels.indexOf(topRegion)],2)}</span>, compared to
+    <span class="hl">${esc(btmRegion||'—')}</span> at the lower end
+    (<span class="hl">${fmt(gMeans[gLabels.indexOf(btmRegion)],2)}</span>).
+  </p>`;
+}
+
+/* ═══════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════ */
+// Wire explore tab to render when switching
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  const orig=btn.onclick;
+  btn.onclick=function(e){
+    orig&&orig.call(this,e);
+    const section=STATE.currentSection;
+    if(section==='explore'&&STATE.rawData.length&&!$('tableBody').querySelector('.highlight')){
+      renderTable(STATE.rawData.slice(0,500));
+    }
+  };
+});
+</script>
+</body>
+</html>
