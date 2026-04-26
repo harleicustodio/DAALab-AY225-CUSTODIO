@@ -363,11 +363,440 @@ function handleTableSort(columnKey, direction) {
 }
 
 // =====================================================================
-// TABLE RENDERER — intentionally empty (explorer tab is blank)
+// TABLE RENDERER & SUMMARY STATISTICS — Data Engine & Summary Stats
 // =====================================================================
 
+/**
+ * Compute per-column summary statistics for all columns.
+ * Returns an array of stat objects, one per column.
+ */
+function computeColumnProfiles(data, columns) {
+    return columns.map(col => {
+        const rawVals    = data.map(r => r?.[col]);
+        const nonMissing = rawVals.filter(v => !isMissingValue(v));
+        const numVals    = nonMissing.map(v => toFiniteNumber(v)).filter(v => v !== null);
+        const isNum      = numVals.length >= 2;
+        const missing    = rawVals.length - nonMissing.length;
+        const missingPct = rawVals.length ? ((missing / rawVals.length) * 100).toFixed(1) : '0.0';
+        const unique     = new Set(nonMissing.map(v => String(v).trim())).size;
+
+        let profile = { col, type: isNum ? 'numeric' : 'categorical', count: nonMissing.length, missing, missingPct, unique };
+
+        if (isNum) {
+            const sorted = [...numVals].sort((a, b) => a - b);
+            const n      = sorted.length;
+            const avg    = mean(numVals);
+            const sd     = stdDev(numVals);
+            const q1     = sorted[Math.floor(n * 0.25)];
+            const median = n % 2 === 0
+                ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
+                : sorted[Math.floor(n / 2)];
+            const q3     = sorted[Math.floor(n * 0.75)];
+            const cv     = Math.abs(avg) > Number.EPSILON ? (sd / Math.abs(avg)) * 100 : null;
+
+            // Skewness (Pearson's moment coefficient)
+            let skewNum = 0;
+            for (const v of numVals) skewNum += ((v - avg) / (sd || 1)) ** 3;
+            const skew = n > 2 ? (skewNum / n) : null;
+
+            profile = { ...profile, avg, sd, min: sorted[0], max: sorted[n - 1], q1, median, q3, cv, skew };
+        } else {
+            // Top categories by frequency
+            const freqMap = new Map();
+            for (const v of nonMissing) {
+                const k = String(v).trim();
+                freqMap.set(k, (freqMap.get(k) || 0) + 1);
+            }
+            const topCats = [...freqMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+            profile.topCats = topCats;
+        }
+        return profile;
+    });
+}
+
+/**
+ * Render the mini inline sparkbar for a column's value distribution.
+ * Uses a simple 5-bucket histogram normalized to 100%.
+ */
+function sparkBar(values) {
+    if (!values || values.length < 2) return '<span class="text-slate-300 text-xs">—</span>';
+    const mn  = Math.min(...values);
+    const mx  = Math.max(...values);
+    if (mn === mx) return '<span class="text-xs text-slate-300">uniform</span>';
+    const buckets = [0, 0, 0, 0, 0, 0, 0, 0];
+    const range   = mx - mn;
+    for (const v of values) {
+        const idx = Math.min(7, Math.floor(((v - mn) / range) * 8));
+        buckets[idx]++;
+    }
+    const peak = Math.max(...buckets);
+    return '<div class="flex items-end gap-[2px] h-5">' +
+        buckets.map(b => {
+            const h = peak > 0 ? Math.max(2, Math.round((b / peak) * 20)) : 2;
+            return `<div style="height:${h}px;width:5px;background:#2563eb;border-radius:1px;opacity:${0.35 + 0.65 * (b / peak)}"></div>`;
+        }).join('') +
+        '</div>';
+}
+
+/**
+ * Render a color-coded badge for skewness interpretation.
+ */
+function skewBadge(skew) {
+    if (skew === null || skew === undefined) return '—';
+    const abs = Math.abs(skew);
+    if (abs < 0.5)  return `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">Symmetric (${skew.toFixed(2)})</span>`;
+    if (abs < 1.0)  return `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700">Moderate skew (${skew.toFixed(2)})</span>`;
+    return `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700">High skew (${skew.toFixed(2)})</span>`;
+}
+
+/**
+ * Render a full-width correlation heatmap for numeric columns (up to 10).
+ */
+function renderCorrelationHeatmap(data, numCols) {
+    const cols = numCols.slice(0, 10);
+    if (cols.length < 2) return '';
+
+    const colVals = cols.map(c => getColumnNumericValues(data, c));
+    const corrs   = cols.map((_, i) => cols.map((__, j) => {
+        if (i === j) return 1;
+        return pearsonCorr(colVals[i], colVals[j]) ?? 0;
+    }));
+
+    const cellSize = Math.max(40, Math.min(72, Math.floor(560 / cols.length)));
+
+    const headerCells = cols.map(c =>
+        `<th style="width:${cellSize}px;max-width:${cellSize}px" class="text-[9px] font-black uppercase text-slate-500 pb-2 text-center overflow-hidden">
+            <div class="truncate px-1" title="${escapeHtml(c)}">${escapeHtml(c.slice(0, 12))}</div>
+         </th>`
+    ).join('');
+
+    const rows = cols.map((rowCol, i) => {
+        const cells = cols.map((__, j) => {
+            const r   = corrs[i][j];
+            const abs = Math.abs(r);
+            let bg, txtColor;
+            if (i === j) { bg = '#1e3a8a'; txtColor = '#fff'; }
+            else if (r > 0) { bg = `rgba(37,99,235,${abs * 0.85 + 0.05})`; txtColor = abs > 0.5 ? '#fff' : '#1e3a8a'; }
+            else            { bg = `rgba(239,68,68,${abs * 0.85 + 0.05})`; txtColor = abs > 0.5 ? '#fff' : '#991b1b'; }
+
+            return `<td style="width:${cellSize}px;height:${cellSize}px;background:${bg};border:2px solid #f8fafc" class="text-center rounded">
+                        <span style="color:${txtColor}" class="text-[10px] font-black">${r.toFixed(2)}</span>
+                    </td>`;
+        }).join('');
+
+        const shortLabel = rowCol.length > 14 ? rowCol.slice(0, 14) + '…' : rowCol;
+        return `<tr>
+            <td class="text-[9px] font-bold text-slate-500 pr-3 whitespace-nowrap text-right" title="${escapeHtml(rowCol)}">${escapeHtml(shortLabel)}</td>
+            ${cells}
+        </tr>`;
+    }).join('');
+
+    return `
+    <div class="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 mt-2">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-black text-slate-900 tracking-tight">Correlation Heatmap</h3>
+                <p class="text-xs text-slate-400 mt-0.5">Pearson r between all numeric columns (up to 10)</p>
+            </div>
+            <div class="flex items-center gap-3 text-[10px] font-bold text-slate-400">
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(37,99,235,0.8)"></span>Positive</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(239,68,68,0.8)"></span>Negative</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm inline-block" style="background:#1e3a8a"></span>Self</span>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="border-collapse" style="table-layout:fixed">
+                <thead><tr><th style="width:110px"></th>${headerCells}</tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
+/**
+ * Build the column profile card HTML for a single column.
+ */
+function buildProfileCard(profile, numVals) {
+    const typeLabel  = profile.type === 'numeric' ? 'Numeric' : 'Categorical';
+    const typeBadge  = profile.type === 'numeric'
+        ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 border border-blue-100">Numeric</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-100">Categorical</span>`;
+
+    const missingBar = parseFloat(profile.missingPct) > 0
+        ? `<div class="mt-2">
+            <div class="flex justify-between text-[9px] font-bold text-slate-400 mb-0.5">
+                <span>Missing</span><span class="text-red-500">${profile.missingPct}%</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-red-400 rounded-full" style="width:${Math.min(100, profile.missingPct)}%"></div>
+            </div>
+           </div>`
+        : `<div class="mt-2 text-[9px] font-bold text-emerald-600">✓ No missing values</div>`;
+
+    let body = '';
+    if (profile.type === 'numeric') {
+        body = `
+        <div class="grid grid-cols-3 gap-2 mt-3">
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Min</p>
+                <p class="text-sm font-black text-slate-700 mt-0.5">${fmt(profile.min)}</p>
+            </div>
+            <div class="bg-blue-50 rounded-xl p-2 text-center border border-blue-100">
+                <p class="text-[9px] font-black text-blue-400 uppercase tracking-widest">Mean</p>
+                <p class="text-sm font-black text-blue-700 mt-0.5">${fmt(profile.avg)}</p>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Max</p>
+                <p class="text-sm font-black text-slate-700 mt-0.5">${fmt(profile.max)}</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mt-2">
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase">Q1</p>
+                <p class="text-xs font-black text-slate-600 mt-0.5">${fmt(profile.q1)}</p>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase">Median</p>
+                <p class="text-xs font-black text-slate-600 mt-0.5">${fmt(profile.median)}</p>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase">Q3</p>
+                <p class="text-xs font-black text-slate-600 mt-0.5">${fmt(profile.q3)}</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase">Std Dev</p>
+                <p class="text-xs font-black text-slate-600 mt-0.5">${fmt(profile.sd)}</p>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-2 text-center">
+                <p class="text-[9px] font-black text-slate-400 uppercase">CV %</p>
+                <p class="text-xs font-black text-slate-600 mt-0.5">${profile.cv !== null ? profile.cv.toFixed(1) + '%' : '—'}</p>
+            </div>
+        </div>
+        <div class="mt-3 flex items-center justify-between">
+            <span class="text-[9px] font-black text-slate-400 uppercase">Distribution</span>
+            ${sparkBar(numVals)}
+        </div>
+        <div class="mt-2 flex items-center justify-between">
+            <span class="text-[9px] font-black text-slate-400 uppercase">Skewness</span>
+            ${skewBadge(profile.skew)}
+        </div>`;
+    } else {
+        const catRows = (profile.topCats || []).map(([label, count]) => {
+            const pct = profile.count ? ((count / profile.count) * 100).toFixed(1) : '0.0';
+            return `<div class="flex items-center justify-between gap-2 mt-1.5">
+                <span class="text-xs text-slate-600 truncate max-w-[120px]" title="${escapeHtml(label)}">${escapeHtml(label.slice(0, 18))}${label.length > 18 ? '…' : ''}</span>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-amber-400 rounded-full" style="width:${pct}%"></div>
+                    </div>
+                    <span class="text-[10px] font-black text-slate-500 w-10 text-right">${pct}%</span>
+                </div>
+            </div>`;
+        }).join('');
+        body = `<div class="mt-3">
+            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Top Categories</p>
+            ${catRows || '<span class="text-slate-300 text-xs">No data</span>'}
+        </div>`;
+    }
+
+    return `
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col hover:shadow-md hover:border-blue-100 transition-all duration-200">
+        <div class="flex items-start justify-between gap-2 mb-1">
+            <h4 class="text-sm font-black text-slate-800 leading-tight break-all" title="${escapeHtml(profile.col)}">${escapeHtml(profile.col.slice(0, 32))}${profile.col.length > 32 ? '…' : ''}</h4>
+            ${typeBadge}
+        </div>
+        <div class="flex items-center gap-4 text-[10px] font-bold text-slate-400 mt-1">
+            <span>${profile.count.toLocaleString()} values</span>
+            <span>${profile.unique.toLocaleString()} unique</span>
+        </div>
+        ${missingBar}
+        ${body}
+    </div>`;
+}
+
+/**
+ * Build the raw data table HTML (paginated, sortable).
+ */
+function buildDataTable(data, columns, maxRows) {
+    const rows = data.slice(0, maxRows);
+
+    const headerCells = columns.map(col => {
+        const isActive = currentSortColumn === col;
+        const arrow    = isActive ? (sortAscending ? ' ↑' : ' ↓') : '';
+        return `<th class="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap cursor-pointer hover:text-blue-600 select-none border-b border-slate-100 transition-colors"
+                    onclick="explorerTableSort('${escapeHtml(col).replace(/'/g, "\\'")}')"
+                    title="Sort by ${escapeHtml(col)}">
+                    ${escapeHtml(col.slice(0, 20))}${col.length > 20 ? '…' : ''}${isActive ? `<span class="text-blue-600">${arrow}</span>` : ''}
+                </th>`;
+    }).join('');
+
+    const dataCells = rows.map((row, ri) => {
+        const cells = columns.map(col => {
+            const raw = row?.[col];
+            const num = toFiniteNumber(raw);
+            const val = isMissingValue(raw)
+                ? `<span class="text-slate-300 italic text-[10px]">—</span>`
+                : num !== null
+                    ? `<span class="font-mono text-blue-700 font-bold">${fmt(num)}</span>`
+                    : `<span class="text-slate-600">${escapeHtml(String(raw).slice(0, 40))}${String(raw).length > 40 ? '…' : ''}</span>`;
+            return `<td class="px-4 py-2.5 text-xs border-b border-slate-50 max-w-[200px] truncate">${val}</td>`;
+        }).join('');
+        const bg = ri % 2 === 0 ? '' : 'bg-slate-50/50';
+        return `<tr class="${bg} hover:bg-blue-50/30 transition-colors">${cells}</tr>`;
+    }).join('');
+
+    return `
+    <div class="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm">
+        <table class="w-full border-collapse min-w-max">
+            <thead class="bg-slate-50 sticky top-0 z-10"><tr>${headerCells}</tr></thead>
+            <tbody>${dataCells}</tbody>
+        </table>
+    </div>`;
+}
+
+/** Called by table header clicks to sort and re-render */
+function explorerTableSort(col) {
+    if (currentSortColumn === col) {
+        sortAscending = !sortAscending;
+    } else {
+        currentSortColumn = col;
+        sortAscending     = true;
+    }
+    displayedTableData = sortByColumn(globalData, currentSortColumn, sortAscending);
+    renderExplorerTable(displayedTableData, TABLE_MAX_ROWS);
+}
+
+/** Search/filter rows by a query string across all columns */
+function explorerSearch(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+        displayedTableData = globalData;
+    } else {
+        displayedTableData = globalData.filter(row =>
+            Object.values(row).some(v => !isMissingValue(v) && String(v).toLowerCase().includes(q))
+        );
+    }
+    const tableContainer = document.getElementById('explorer-table-container');
+    if (tableContainer && allColumns.length) {
+        tableContainer.innerHTML = buildDataTable(displayedTableData, allColumns, TABLE_MAX_ROWS);
+        const countEl = document.getElementById('explorer-row-count');
+        if (countEl) countEl.innerText = `${Math.min(TABLE_MAX_ROWS, displayedTableData.length).toLocaleString()} of ${displayedTableData.length.toLocaleString()} rows${q ? ' (filtered)' : ''}`;
+    }
+}
+
+/**
+ * Main entry point: renders the entire Data Engine & Summary Statistics view.
+ */
 function renderExplorerTable(dataToDisplay = globalData, maxRows = TABLE_MAX_ROWS) {
     displayedTableData = Array.isArray(dataToDisplay) ? dataToDisplay : [];
+
+    const container = document.getElementById('view-explorer');
+    if (!container) return;
+
+    const columns     = allColumns.length ? allColumns : (globalData.length ? Object.keys(globalData[0]) : []);
+    const totalRows   = globalData.length;
+    const totalCols   = columns.length;
+    const numColsList = columns.filter(c => isColumnNumeric(globalData, c));
+    const catColsList = columns.filter(c => !isColumnNumeric(globalData, c));
+
+    // Compute profiles for all columns (sample for perf)
+    const sampleData  = globalData.slice(0, Math.min(3000, globalData.length));
+    const profiles    = computeColumnProfiles(sampleData, columns);
+    const numValsByCol = {};
+    numColsList.forEach(c => { numValsByCol[c] = getColumnNumericValues(sampleData, c); });
+
+    // Overview KPIs
+    const missingCells = profiles.reduce((s, p) => s + p.missing, 0);
+    const totalCells   = totalRows * totalCols;
+    const missingPct   = totalCells > 0 ? ((missingCells / totalCells) * 100).toFixed(1) : '0.0';
+    const completeness = (100 - parseFloat(missingPct)).toFixed(1);
+
+    // Profile cards HTML
+    const profileCards = profiles.map(p => buildProfileCard(p, numValsByCol[p.col] || [])).join('');
+
+    // Heatmap
+    const heatmap = renderCorrelationHeatmap(sampleData, numColsList);
+
+    // Table section
+    const tableHTML = columns.length
+        ? buildDataTable(displayedTableData, columns, maxRows)
+        : '<div class="text-slate-400 text-sm italic">No data loaded.</div>';
+
+    container.innerHTML = `
+    <h2 class="text-6xl font-black tracking-tighter leading-none text-slate-900">Dataset Explorer</h2>
+
+    <!-- KPI Overview Strip -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col gap-1">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Rows</span>
+            <span class="text-3xl font-black text-slate-900 leading-none">${totalRows.toLocaleString()}</span>
+            <span class="text-[10px] text-slate-400 font-medium">records loaded</span>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col gap-1">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Columns</span>
+            <span class="text-3xl font-black text-slate-900 leading-none">${totalCols.toLocaleString()}</span>
+            <span class="text-[10px] text-slate-400 font-medium">${numColsList.length} numeric · ${catColsList.length} categorical</span>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col gap-1">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Completeness</span>
+            <span class="text-3xl font-black ${parseFloat(completeness) >= 90 ? 'text-emerald-600' : parseFloat(completeness) >= 70 ? 'text-amber-600' : 'text-red-600'} leading-none">${completeness}%</span>
+            <div class="w-full h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-700 ${parseFloat(completeness) >= 90 ? 'bg-emerald-400' : parseFloat(completeness) >= 70 ? 'bg-amber-400' : 'bg-red-400'}" style="width:${completeness}%"></div>
+            </div>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col gap-1">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Missing Cells</span>
+            <span class="text-3xl font-black text-slate-900 leading-none">${missingCells.toLocaleString()}</span>
+            <span class="text-[10px] text-slate-400 font-medium">${missingPct}% of ${totalCells.toLocaleString()} total cells</span>
+        </div>
+    </div>
+
+    <!-- Column Profiles -->
+    <div>
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="text-2xl font-black text-slate-900 tracking-tight">Column Profiles</h3>
+                <p class="text-xs text-slate-400 mt-0.5 font-medium">Summary statistics for each column (sampled from up to 3,000 rows)</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            ${profileCards || '<p class="text-slate-400 text-sm italic col-span-4">No columns detected.</p>'}
+        </div>
+    </div>
+
+    <!-- Correlation Heatmap -->
+    ${numColsList.length >= 2 ? heatmap : ''}
+
+    <!-- Raw Data Table -->
+    <div>
+        <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div>
+                <h3 class="text-2xl font-black text-slate-900 tracking-tight">Raw Data Table</h3>
+                <p id="explorer-row-count" class="text-xs text-slate-400 mt-0.5 font-medium">
+                    ${Math.min(maxRows, displayedTableData.length).toLocaleString()} of ${displayedTableData.length.toLocaleString()} rows
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-base pointer-events-none">search</span>
+                    <input
+                        type="text"
+                        id="explorer-search"
+                        placeholder="Search rows…"
+                        oninput="explorerSearch(this.value)"
+                        class="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all w-52 shadow-sm"
+                    />
+                </div>
+                <span class="text-[10px] font-bold text-slate-400">Click headers to sort</span>
+            </div>
+        </div>
+        <div id="explorer-table-container">
+            ${tableHTML}
+        </div>
+        ${totalRows > maxRows ? `<div class="mt-3 text-center text-xs font-bold text-slate-400">Showing first ${maxRows.toLocaleString()} of ${totalRows.toLocaleString()} rows. Upload a filtered CSV to explore more.</div>` : ''}
+    </div>`;
 }
 
 // =====================================================================
