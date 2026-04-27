@@ -123,3 +123,5 @@ main
 
 ## 📄 License
 This project is open-source and available for educational and analytical use.
+
+Made by authors: Harlei F. Custodio and Sophia Gwyneth T. Dichoso
