@@ -4,10 +4,8 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>Education Statistics Analysis</title>
-    <link rel="stylesheet" href="stats.css">
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <script id="tailwind-config">
@@ -15,6 +13,7 @@
             theme: { extend: { colors: { "primary": "#2563eb", "surface": "#faf8ff", "on-surface": "#131b2e" } } },
         }
     </script>
+    <link rel="stylesheet" href="stats.css"/>
 </head>
 <body class="bg-surface text-on-surface">
 
@@ -34,19 +33,29 @@
 
 <div id="loading-overlay" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 text-center">
     <div class="bg-white rounded-3xl p-10 max-w-md w-full shadow-2xl relative">
-        <button id="cancel-load" class="absolute top-5 right-5 text-slate-300 hover:text-red-500 transition-colors">
-            <span class="material-symbols-outlined text-2xl font-bold">close</span>
-        </button>
         <div class="mb-8 flex justify-center"><div class="relative"><div class="w-16 h-16 border-4 border-slate-100 rounded-full"></div><div class="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div></div></div>
-        <h3 class="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">Analyzing Stream</h3>
+        <h3 class="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">Loading Dataset</h3>
         <div class="overflow-hidden h-3 mb-4 rounded-full bg-slate-100 mt-8"><div id="load-progress-bar" style="width:0%" class="h-full bg-primary"></div></div>
         <div id="load-percentage" class="text-sm font-black text-primary italic mb-2">0%</div>
     </div>
 </div>
 
+<!-- Dataset Picker Modal -->
+<div id="dataset-modal" class="fixed inset-0 z-[105] hidden flex items-center justify-center p-6">
+    <div class="bg-white rounded-3xl p-10 max-w-md w-full shadow-2xl">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-black text-slate-900 uppercase tracking-tighter">Select Dataset</h3>
+            <button onclick="document.getElementById('dataset-modal').classList.add('hidden')" class="text-slate-300 hover:text-slate-600 transition-colors">
+                <span class="material-symbols-outlined text-2xl">close</span>
+            </button>
+        </div>
+        <p class="text-xs text-slate-400 font-medium mb-6">Choose one of the pre-loaded EdStats datasets to explore.</p>
+        <div id="dataset-list" class="flex flex-col gap-3"></div>
+    </div>
+</div>
+
 <main class="min-h-screen flex flex-col">
     <header class="sticky top-0 z-40 w-full flex justify-between items-center px-8 h-20 bg-white shadow-sm border-b border-slate-100">
-        
         <div class="flex items-center gap-10 h-full">
             <div class="flex items-center gap-4">
                 <h1 class="text-xl font-black tracking-tighter text-slate-900">Education Statistics Analysis</h1>
@@ -54,7 +63,6 @@
                     <span id="display-filename">None</span>
                 </div>
             </div>
-
             <nav class="flex items-center gap-8 h-full pt-[2px]">
                 <button onclick="switchView('explorer')" id="nav-explorer" class="active-nav flex items-center gap-2 pb-1 border-b-2 border-transparent text-slate-400 hover:text-slate-900 transition-colors text-[11px] uppercase font-bold tracking-widest mt-1">
                     <span class="material-symbols-outlined text-base">table_chart</span>Data Engine & Summary Statistics
@@ -67,26 +75,47 @@
                 </button>
             </nav>
         </div>
-
         <div class="flex items-center gap-3">
-            <label for="csv-upload" class="cursor-pointer bg-blue-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 transition-all shadow-lg tracking-widest uppercase">UPLOAD DATASET</label>
-            <input type="file" id="csv-upload" class="hidden" accept=".csv">
-            <button onclick="clearSystem()" class="bg-red-50 text-red-600 border border-red-100 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all">CLEAR</button>
+            <button onclick="openDatasetPicker()" class="cursor-pointer bg-blue-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 transition-all shadow-lg tracking-widest uppercase flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">dataset</span>LOAD DATASET
+            </button>
+
         </div>
     </header>
+
+    <!-- ── How-to-use instruction banner ── -->
+    <div id="instruction-banner" class="w-full bg-blue-50 border-b border-blue-100 px-8 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 text-blue-700">
+            <span class="material-symbols-outlined text-xl flex-shrink-0">info</span>
+            <p class="text-xs font-semibold leading-snug">
+                <strong class="font-black">How to use:</strong>
+                Click <span class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-lg tracking-widest uppercase">
+                    <span class="material-symbols-outlined text-[11px]">dataset</span>LOAD DATASET
+                </span>
+                to pick a pre-loaded EdStats dataset &rarr; explore it in the
+                <strong class="font-black">Data Engine</strong> tab &rarr; view charts in
+                <strong class="font-black">Visualizations</strong> &rarr; check stats in
+                <strong class="font-black">Analysis</strong>.
+            </p>
+        </div>
+        <button onclick="document.getElementById('instruction-banner').style.display='none'"
+                class="flex-shrink-0 text-blue-300 hover:text-blue-600 transition-colors"
+                title="Dismiss">
+            <span class="material-symbols-outlined text-lg">close</span>
+        </button>
+    </div>
 
     <div id="main-content" class="p-12 max-w-7xl mx-auto w-full">
 
         <div id="view-explorer" class="tab-content flex-col gap-8 visible-tab">
             <div id="explorer-empty-state" class="text-slate-400 text-sm italic font-medium py-24 text-center">
-                <span class="material-symbols-outlined text-5xl block mb-4 text-slate-200">upload_file</span>
-                Upload a CSV dataset to begin exploring.
+                <span class="material-symbols-outlined text-5xl block mb-4 text-slate-200">dataset</span>
+                Click <strong class="text-blue-500">LOAD DATASET</strong> to choose a pre-loaded EdStats dataset.
             </div>
         </div>
 
         <div id="view-viz" class="tab-content flex-col gap-8 hidden-tab">
             <h2 class="text-6xl font-black tracking-tighter leading-none"> Visualizations</h2>
-
             <div id="col-selector-panel" class="hidden flex-col gap-4">
                 <div class="flex items-center justify-between flex-wrap gap-3">
                     <div>
@@ -101,9 +130,7 @@
                     <div id="scatter-x-btn-row" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto"></div>
                 </div>
             </div>
-
             <div id="warning-slot"></div>
-
             <div class="grid grid-cols-12 gap-8">
                 <div class="dashboard-card col-span-12 lg:col-span-8 bg-white rounded-3xl p-10 shadow-sm border border-slate-100 flex flex-col">
                     <h3 class="text-xl font-bold mb-1">Top 10 Performers</h3>
@@ -115,7 +142,6 @@
                     <canvas id="barChart" class="hidden"></canvas>
                     <div id="desc-bar" class="mt-8 p-6 bg-slate-50 rounded-2xl text-sm text-slate-600 leading-relaxed italic opacity-0 transition-opacity">...</div>
                 </div>
-
                 <div class="dashboard-card col-span-12 lg:col-span-4 bg-white rounded-3xl p-10 shadow-sm border border-slate-100 flex flex-col items-center">
                     <h3 class="text-xl font-bold mb-1 text-center">Distribution</h3>
                     <p id="doughnut-subtitle" class="text-xs text-slate-400 font-medium mb-4 text-center">—</p>
@@ -126,7 +152,6 @@
                     <canvas id="doughnutChart" class="hidden"></canvas>
                     <div id="desc-doughnut" class="mt-8 p-6 bg-slate-50 rounded-2xl text-sm text-slate-600 leading-relaxed italic opacity-0 transition-opacity w-full text-center">...</div>
                 </div>
-
                 <div class="dashboard-card col-span-12 bg-white rounded-3xl p-10 shadow-sm border border-slate-100">
                     <h3 class="text-xl font-bold mb-1 text-slate-900">Correlation Matrix (Scatter Plot)</h3>
                     <p id="scatter-subtitle" class="text-xs text-slate-400 font-medium mb-4">—</p>
@@ -142,7 +167,6 @@
 
         <div id="view-stats" class="tab-content flex-col gap-12 hidden-tab">
             <h2 class="text-6xl font-black tracking-tighter leading-none text-slate-900"> Analysis</h2>
-            
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="dashboard-card card-border-blue bg-white p-8 relative flex flex-col justify-center min-h-[220px]">
                     <div class="flex items-center gap-3 mb-4 absolute top-6 left-8 text-blue-600">
@@ -151,7 +175,6 @@
                     </div>
                     <div id="desc-stats-content" class="text-slate-400 text-sm italic font-medium mt-10">Waiting for dataset ingestion...</div>
                 </div>
-
                 <div class="dashboard-card card-border-blue bg-white p-8 relative flex flex-col justify-center min-h-[220px]">
                     <div class="flex items-center justify-between absolute top-6 left-8 right-8 w-auto">
                         <div class="flex items-center gap-3 text-blue-600">
@@ -165,7 +188,6 @@
                     </div>
                     <div id="lr-content" class="text-slate-400 text-sm italic font-medium mt-10">Awaiting numerical correlation pairs...</div>
                 </div>
-
                 <div class="dashboard-card card-border-green bg-white p-8 relative flex flex-col justify-center min-h-[220px]">
                     <div class="flex items-center gap-3 mb-4 absolute top-6 left-8 text-emerald-600">
                         <span class="material-symbols-outlined font-black">sync_alt</span>
@@ -173,7 +195,6 @@
                     </div>
                     <div id="corr-content" class="text-slate-400 text-sm italic font-medium mt-10">Processing feature associations...</div>
                 </div>
-
                 <div class="dashboard-card card-border-light-blue bg-white p-8 relative flex flex-col justify-center min-h-[220px]">
                     <div class="flex items-center gap-3 mb-4 absolute top-6 left-8 text-blue-500">
                         <span class="material-symbols-outlined font-black">lightbulb</span>
@@ -187,6 +208,7 @@
     </div>
 </main>
 
-<script src="stats.js"></script>
+    
+    <script src="stats.js"></script>
 </body>
 </html>
